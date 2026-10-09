@@ -132,3 +132,6 @@ ul.list li>div{min-width:0;overflow-wrap:anywhere;flex:1}
 .celebrate{text-align:center;align-items:center}
 .celebrate .rank{font-size:2rem}
 @media (prefers-reduced-motion:reduce){.bar>i{transition:none}}
+/* iOS draws date inputs wider than their box; keep them inside the card */
+input[type=date]{-webkit-appearance:none;appearance:none;display:block;max-width:100%;min-height:52px;line-height:1.2}
+input[type=date]::-webkit-date-and-time-value{text-align:left}
