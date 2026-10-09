@@ -8,6 +8,6 @@ export const firebaseConfig = {
   messagingSenderId: '987041583677',
   appId: '1:987041583677:web:62403ee43c175e354ed054',
 };
-export const STUDENT_UID = 'xFqJAFGGioUUadmrgbY7Fpbixwm2';
-export const PARENT_UID = 'mhP5pRPUlXg3nooLBIsjMyHvF6j2';
-export const APP_VERSION = '1.0.0';
+export const STUDENT_UID = 'mhP5pRPUlXg3nooLBIsjMyHvF6j2';
+export const PARENT_UID = 'xFqJAFGGioUUadmrgbY7Fpbixwm2';
+export const APP_VERSION = '1.0.1';
