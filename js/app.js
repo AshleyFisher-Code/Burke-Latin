@@ -67,7 +67,7 @@ onAuthStateChanged(auth, u => {
     if (S && saveTimer) return; // a local change is about to be written
     S = incoming ? Object.assign(blankState(), incoming) : blankState();
     if (!loadedOnce) { loadedOnce = true; route(); } else if (!run) route();
-  }, e => { console.error(e); show(h('section', { class: 'card' }, h('h2', { text: 'Can\'t load progress' }), h('p', { class: 'muted', text: e.code === 'permission-denied' ? 'The database rules are blocking this account. Check that the Firestore rules were published.' : 'Check the connection and reload.' }), h('button', { class: 'ghost', onclick: () => signOut(auth) }, 'Sign out'))); }));
+  }, e => { console.error(e); show(h('section', { class: 'card' }, h('h2', { text: 'Can\'t load progress' }), h('p', { class: 'muted', text: e.code === 'permission-denied' ? 'The database rules are blocking this account. Check that the Firestore rules were published.' : 'Check the connection and reload.' }), h('p', { class: 'small muted', text: `v${APP_VERSION} · signed in as …${u.uid.slice(0, 4)} · looking for …${STUDENT_UID.slice(0, 4)}` }), h('button', { class: 'ghost', onclick: () => signOut(auth) }, 'Sign out'))); }));
 });
 
 /* ---------- routing ---------- */
