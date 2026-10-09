@@ -156,3 +156,23 @@ assert(readiness(s4, { ...quiz, daysLeft: 5 }, qd - 5) === null, 'hidden before 
 
 console.log(`checks: ${n}  failures: ${fails.length}  (phrases ${phraseCount}, sentences ${sentCount})`);
 if (fails.length) { console.log(fails.slice(0, 80).join('\n')); process.exit(1); }
+/* ---------- days off ---------- */
+import { federalHolidays, dayOff } from '../js/srs.js';
+const fh = federalHolidays(2026);
+const expect26 = { '2026-01-01': 1, '2026-01-19': 1, '2026-02-16': 1, '2026-05-25': 1, '2026-06-19': 1, '2026-07-04': 1, '2026-09-07': 1, '2026-10-12': 1, '2026-11-11': 1, '2026-11-26': 1, '2026-12-25': 1 };
+const fh27 = federalHolidays(2027);
+const expect27 = ['2027-01-01', '2027-01-18', '2027-02-15', '2027-05-31', '2027-06-19', '2027-07-04', '2027-09-06', '2027-10-11', '2027-11-11', '2027-11-25', '2027-12-25'];
+let hf = 0;
+for (const k of Object.keys(expect26)) if (!fh[k]) { hf++; console.log('missing 2026 holiday', k, fh); }
+for (const k of expect27) if (!fh27[k]) { hf++; console.log('missing 2027 holiday', k); }
+if (!dayOff(dayFromISO('2027-03-05'), {})) { hf++; console.log('March 5 not off'); }
+if (dayOff(dayFromISO('2027-03-06'), {})) { hf++; console.log('March 6 wrongly off'); }
+// streak across Thanksgiving: practice Wed, skip Thu (holiday), practice Fri -> continues with no rest day used
+const s5 = blankState(); const wed = dayFromISO('2026-11-25');
+completeDay(s5, wed - 1, {}); completeDay(s5, wed, {});
+if (!streakView(s5, wed + 1, {}).off) { hf++; console.log('Thanksgiving not shown as off'); }
+completeDay(s5, wed + 2, {});
+if (s5.streak.count !== 3 || s5.streak.rest !== 0) { hf++; console.log('holiday broke streak', s5.streak); }
+// skipping a normal day with no rest breaks it
+const s6 = blankState(); completeDay(s6, wed - 3, {}); completeDay(s6, wed - 1, {}); if (s6.streak.count !== 1) { hf++; console.log('normal skip should reset', s6.streak); }
+console.log(`days-off checks: ${hf ? hf + ' FAILED' : 'all passed'}`); if (hf) process.exit(1);

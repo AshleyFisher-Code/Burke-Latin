@@ -57,6 +57,27 @@ export function skillStatus(state, id) {
   return { label: 'Needs work', level: 'bad', acc };
 }
 
+/* ---------- days off (streak-safe) ---------- */
+// Federal holidays (actual date) plus any family days off (month-day, every year).
+function nthWeekday(y, m, wd, n) { const d = new Date(Date.UTC(y, m, 1)); const first = (wd - d.getUTCDay() + 7) % 7; return 1 + first + (n - 1) * 7; }
+function lastWeekday(y, m, wd) { const last = new Date(Date.UTC(y, m + 1, 0)); return last.getUTCDate() - ((last.getUTCDay() - wd + 7) % 7); }
+export function federalHolidays(y) {
+  const iso = (m, d) => `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  return {
+    [iso(0, 1)]: 'New Year\'s Day', [iso(0, nthWeekday(y, 0, 1, 3))]: 'Martin Luther King Jr. Day', [iso(1, nthWeekday(y, 1, 1, 3))]: 'Presidents\' Day',
+    [iso(4, lastWeekday(y, 4, 1))]: 'Memorial Day', [iso(5, 19)]: 'Juneteenth', [iso(6, 4)]: 'Independence Day', [iso(8, nthWeekday(y, 8, 1, 1))]: 'Labor Day',
+    [iso(9, nthWeekday(y, 9, 1, 2))]: 'Columbus Day', [iso(10, 11)]: 'Veterans Day', [iso(10, nthWeekday(y, 10, 4, 4))]: 'Thanksgiving', [iso(11, 25)]: 'Christmas',
+  };
+}
+export const DEFAULT_OFF_DAYS = ['03-05'];
+export function dayOff(day, settings) {
+  const iso = isoFromDay(day), y = Number(iso.slice(0, 4));
+  const fed = federalHolidays(y)[iso]; if (fed) return fed;
+  const fam = (settings && Array.isArray(settings.offDays) ? settings.offDays : DEFAULT_OFF_DAYS);
+  return fam.includes(iso.slice(5)) ? 'Day off' : null;
+}
+const missedBetween = (last, today, settings) => { let n = 0; for (let d = last + 1; d < today; d++) if (!dayOff(d, settings)) n++; return n; };
+
 /* ---------- streak ---------- */
 export const RANKS = [
   [5, 'Tīrō', 'recruit'], [10, 'Mīles', 'soldier'], [25, 'Signifer', 'standard-bearer'], [50, 'Centuriō', 'centurion'],
@@ -70,21 +91,23 @@ export function milestones(upTo) {
 export function rankFor(count) { let r = null; for (const m of milestones(count)) if (count >= m.days) r = m; return r; }
 export function nextMilestone(count) { return milestones(count).find(m => m.days > count); }
 // What the streak looks like right now (without changing it).
-export function streakView(st, today) {
+export function streakView(st, today, settings) {
   const s = st.streak; if (s.last == null) return { count: 0, done: false, atRisk: false, rest: s.rest };
   if (s.last === today) return { count: s.count, done: true, atRisk: false, rest: s.rest };
-  const gap = today - s.last - 1; // full days missed
+  const off = dayOff(today, settings);
+  const gap = missedBetween(s.last, today, settings); // practice days missed (days off don't count)
+  if (off && gap <= s.rest) return { count: s.count, done: false, atRisk: false, rest: s.rest, off, restNeeded: gap || undefined };
   if (gap === 0) return { count: s.count, done: false, atRisk: true, rest: s.rest };
   if (gap <= s.rest) return { count: s.count, done: false, atRisk: true, rest: s.rest, restNeeded: gap };
   return { count: 0, done: false, atRisk: false, rest: 0, broken: s.count };
 }
 // Call when Today's practice is finished. Returns {count, usedRest, earnedRest, newRank}.
-export function completeDay(st, today) {
+export function completeDay(st, today, settings) {
   const s = st.streak; const out = { usedRest: 0, earnedRest: false, newRank: null };
   if (s.last === today) { out.count = s.count; return out; }
   if (s.last == null) s.count = 1;
   else {
-    const gap = today - s.last - 1;
+    const gap = missedBetween(s.last, today, settings);
     if (gap <= 0) s.count += 1;
     else if (gap <= s.rest) { s.rest -= gap; out.usedRest = gap; s.count += 1; }
     else { s.count = 1; s.rest = 0; }

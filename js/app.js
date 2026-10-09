@@ -97,14 +97,14 @@ function renderLogin() {
 /* ---------- student home ---------- */
 const today = () => dayNum();
 function streakCard() {
-  const t = today(), v = streakView(S, t), rk = rankFor(v.count), nx = nextMilestone(v.count);
+  const t = today(), v = streakView(S, t, settings), rk = rankFor(v.count), nx = nextMilestone(v.count);
   const reward = nx && settings.rewards && settings.rewards[nx.days];
   const prev = rk ? rk.days : 0, frac = nx ? (v.count - prev) / (nx.days - prev) : 1;
   return h('section', { class: 'card' },
     h('div', { class: 'streak' },
       h('div', { class: 'flame' }, h('big', { text: v.count }), h('small', { text: v.count === 1 ? 'day' : 'days' })),
       h('div', {}, rk ? h('div', { class: 'rank' }, rk.latin, ' ', h('em', { text: rk.en })) : h('div', { class: 'rank' }, 'Streak')),
-      h('div', { class: 'small muted' }, v.done ? 'Done today ✓' : v.restNeeded ? `Practice today: a rest day covers the missed day.` : v.atRisk ? 'Practice today to keep it going.' : v.broken ? `Streak reset (was ${v.broken}). Start a new one today.` : 'Finish Today\'s practice to start a streak.')),
+      h('div', { class: 'small muted' }, v.done ? 'Done today ✓' : v.off ? `${v.off === 'Day off' ? 'Day off' : v.off}: your streak is safe today. Practice if you want.` : v.restNeeded ? `Practice today: a rest day covers the missed day.` : v.atRisk ? 'Practice today to keep it going.' : v.broken ? `Streak reset (was ${v.broken}). Start a new one today.` : 'Finish Today\'s practice to start a streak.')),
     nx ? h('div', {}, h('div', { class: 'spread small' }, h('span', {}, `${nx.days - v.count} to `, h('b', { text: nx.latin }), reward ? ` → ${reward}` : ''), h('span', { class: 'muted' }, 'Rest days ', h('span', { class: 'rest' }, h('i', { class: v.rest >= 1 ? 'on' : '' }), h('i', { class: v.rest >= 2 ? 'on' : '' })))),
       h('div', { class: 'meter', style: 'margin-top:6px' }, h('i', { style: `width:${Math.max(4, Math.round(frac * 100))}%` }))) : null);
 }
@@ -119,7 +119,7 @@ function lightCard(q, rd, compact) {
     compact ? h('button', { class: 'ghost', onclick: () => go('prep') }, 'Go to Test Prep') : null);
 }
 function renderHome() {
-  const t = today(), q = nextQuiz(settings, t), rd = q ? readiness(S, q, t) : null, v = streakView(S, t);
+  const t = today(), q = nextQuiz(settings, t), rd = q ? readiness(S, q, t) : null, v = streakView(S, t, settings);
   const saved = loadRun();
   const name = settings.name || '';
   const daily = q && q.daysLeft <= 4 ? 'Quiz prep' : isMasteryDay(S) ? 'Mastery Check' : "Today's practice";
@@ -290,7 +290,7 @@ function finishRun() {
   }
   if (r.sess.counts) {
     const before = S.streak.last === t;
-    const out = completeDay(S, t);
+    const out = completeDay(S, t, settings);
     if (!before) { if (out.newRank) celebrate = out.newRank; if (out.earnedRest) extra.push(h('p', { class: 'small', text: 'You earned a rest day (7 days in a row). A missed day won\'t break your streak.' })); if (out.usedRest) extra.push(h('p', { class: 'small muted', text: `A rest day covered ${out.usedRest} missed day${out.usedRest > 1 ? 's' : ''}.` })); }
   }
   S.log = (S.log || []).concat([{ day: t, at: Date.now(), mode: r.sess.mode, n: r.firstTotal, right: r.firstRight }]).slice(-150);
@@ -309,7 +309,7 @@ function finishRun() {
 
 /* ---------- parent ---------- */
 function renderParent() {
-  const t = today(), v = streakView(S, t), rk = rankFor(v.count), q = nextQuiz(settings, t), rd = q ? readiness(S, q, t) : null;
+  const t = today(), v = streakView(S, t, settings), rk = rankFor(v.count), q = nextQuiz(settings, t), rd = q ? readiness(S, q, t) : null;
   const log = S.log || [];
   const practicedDays = new Set(log.filter(l => ['daily', 'mastery', 'quizprep'].includes(l.mode)).map(l => l.day));
   const c = statusCounts(MAX_STAGE);
@@ -356,6 +356,7 @@ function settingsCard() {
       s.quizzes.length ? h('ul', { class: 'list' }, s.quizzes.slice().sort((a, b) => a.date.localeCompare(b.date)).map(q => h('li', {}, h('div', { text: `Stage ${q.stage} quiz · ${fmtDate(q.date)}` }), h('button', { class: 'linkbtn', onclick: () => { s.quizzes = s.quizzes.filter(x => x !== q); settings = s; persist().then(route); } }, 'Remove')))) : h('p', { class: 'small muted', text: 'None yet.' }),
       h('div', { class: 'fields two', style: 'margin-top:8px' }, h('label', { class: 'f' }, 'Date', qDate), h('label', { class: 'f' }, 'Covers', qStage)),
       h('button', { class: 'ghost', style: 'margin-top:8px', onclick: () => { if (!qDate.value) return; s.quizzes.push({ date: qDate.value, stage: Number(qStage.value) }); settings = s; persist().then(route); } }, 'Add quiz date')),
+    h('div', {}, h('div', { class: 'eyebrow', text: 'Days off' }), h('p', { class: 'small muted', text: 'Federal holidays and March 5 don\'t count against his streak. He can still practice on them.' })),
     h('div', {}, h('div', { class: 'eyebrow', text: 'Streak rewards' }), h('div', { class: 'fields' }, rewardInputs.map(({ m, el }) => h('label', { class: 'f' }, `${m.days} days · ${m.latin}`, el)))),
     h('div', { class: 'actions' }, h('button', { class: 'main', onclick: () => persist() }, 'Save settings')), msg);
 }
