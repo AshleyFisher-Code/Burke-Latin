@@ -176,3 +176,19 @@ if (s5.streak.count !== 3 || s5.streak.rest !== 0) { hf++; console.log('holiday 
 // skipping a normal day with no rest breaks it
 const s6 = blankState(); completeDay(s6, wed - 3, {}); completeDay(s6, wed - 1, {}); if (s6.streak.count !== 1) { hf++; console.log('normal skip should reset', s6.streak); }
 console.log(`days-off checks: ${hf ? hf + ' FAILED' : 'all passed'}`); if (hf) process.exit(1);
+/* ---------- unit-only vocab ---------- */
+import { buildUnit } from '../js/session.js';
+let uf = 0;
+for (let i = 0; i < 50; i++) {
+  const m = buildMock(blankState(), {}, 2);
+  const v = m.specs.filter(s => s.sec === 0);
+  if (v.length !== 10 || v.some(s => W[s.id].stage !== 2)) { uf++; console.log('mock vocab not unit-only', v.map(s => s.id)); break; }
+  const pts = m.specs.reduce((a, s) => a + s.pts, 0); if (pts !== 30) { uf++; console.log('mock pts', pts); break; }
+}
+const u = buildUnit(2); if (u.specs.some(s => s.id && W[s.id].stage !== 2) || u.counts) { uf++; console.log('unit session wrong'); }
+const s7 = blankState(); const qd7 = dayFromISO('2026-10-16'), q7 = { stage: 2, day: qd7, daysLeft: 2 };
+WORDS.filter(w => w.stage === 2).forEach(w => updateWord(s7, w.id, true, qd7 - 2));
+g.SKILLS.forEach(sk => { s7.skills[sk.id] = { hist: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1] }; });
+s7.mocks.push({ stage: 2, day: qd7 - 1, at: Date.now(), score: 28 });
+const r7 = readiness(s7, q7, qd7 - 1); if (r7.color !== 'green' || r7.total !== 30) { uf++; console.log('unit-only readiness', r7); }
+console.log(`unit checks: ${uf ? uf + ' FAILED' : 'all passed'}`); if (uf) process.exit(1);

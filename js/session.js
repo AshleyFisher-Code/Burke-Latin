@@ -66,9 +66,9 @@ export function buildMastery(state, today, stage) {
 }
 export function buildQuizPrep(state, settings, today, quiz) {
   const winStart = quiz.day - 4;
-  const qw = quizWords(quiz.stage);
+  const qw = quizWords(quiz.stage); // this unit's words: must all be confirmed
   const unconf = qw.filter(w => { const ws = state.words[w.id]; return !(ws && ws.confirmed != null && ws.confirmed >= winStart && ws.lastOk); });
-  const due = qw.filter(w => !unconf.includes(w) && state.words[w.id] && state.words[w.id].due <= today);
+  const due = WORDS.filter(w => w.stage <= quiz.stage && !unconf.includes(w) && state.words[w.id] && state.words[w.id].seen && state.words[w.id].due <= today); // older words stay in review
   const vocab = shuffle(unconf).slice(0, 22).concat(shuffle(due).slice(0, Math.max(0, 22 - unconf.length)));
   const vspecs = vocab.map(w => vocabSpec(w.id, Math.random() < 0.5 ? 'l2e' : 'e2l'));
   const g = skillCards(state, settings, 6, quiz.stage, quiz.stage);
@@ -82,6 +82,7 @@ export function buildReview(state, settings, today) {
     .sort((a, b) => state.words[a.id].due - state.words[b.id].due).slice(0, 25);
   return { mode: 'review', title: 'Vocab review', specs: due.map(w => vocabSpec(w.id, dirFor(state.words[w.id]))) };
 }
+export function buildUnit(stage) { const s = buildLearn(stage); return { ...s, mode: 'unit', title: `Unit ${stage} vocab` }; }
 export function buildLearn(stage) {
   const ws = WORDS.filter(w => w.stage === stage);
   const a = shuffle(ws).map(w => vocabSpec(w.id, 'l2e'));
@@ -127,9 +128,10 @@ export function buildTestRun(state, settings, stage) {
 // Mock quiz in the teacher's format, scored out of 30.
 export function buildMock(state, settings, stage) {
   const pick = makePicker(state);
-  const cur = shuffle(WORDS.filter(w => w.stage === stage && w.kind !== 'x')), prev = shuffle(WORDS.filter(w => w.stage < stage && w.kind !== 'x'));
-  const misc = shuffle(WORDS.filter(w => w.stage <= stage && w.kind === 'x'));
-  const vocab = cur.slice(0, 6).concat(prev.slice(0, 2), misc.slice(0, 2));
+  // Vocab section: this unit's words only (like the real test). Grammar sections below use every word so far.
+  const cur = shuffle(WORDS.filter(w => w.stage === stage && w.kind !== 'x'));
+  const misc = shuffle(WORDS.filter(w => w.stage === stage && w.kind === 'x'));
+  const vocab = cur.slice(0, 8).concat(misc.slice(0, 2));
   const sections = [];
   sections.push({ name: 'I. Vocabulary', pts: 1, specs: shuffle(vocab).map(w => vocabSpec(w.id, 'l2e')) });
   if (stage >= 2) {

@@ -126,7 +126,8 @@ export function nextQuiz(settings, today) {
   if (!qs.length) return null;
   const q = qs[0]; return { ...q, day: dayFromISO(q.date), daysLeft: dayFromISO(q.date) - today };
 }
-export const quizWords = stage => WORDS.filter(w => w.stage <= stage);
+// The vocab test covers only the current unit's words; grammar covers everything so far.
+export const quizWords = stage => WORDS.filter(w => w.stage === stage);
 export const quizSkills = stage => SKILLS.filter(s => s.stage <= stage);
 export function readiness(st, quiz, today, nowMs = Date.now()) {
   if (!quiz || quiz.daysLeft > 4 || quiz.daysLeft < 0) return null;
@@ -141,7 +142,7 @@ export function readiness(st, quiz, today, nowMs = Date.now()) {
   const bestRecent = recent.length ? Math.max(...recent.map(m => m.score)) : null;
   const bestWin = mocks.length ? Math.max(...mocks.map(m => m.score)) : null;
   const reasons = [];
-  if (vocabPct < 1) reasons.push(`${qw.length - confirmed.length} words not confirmed yet`);
+  if (vocabPct < 1) reasons.push(`${qw.length - confirmed.length} of ${qw.length} Unit ${quiz.stage} words not confirmed yet`);
   const weak = skills.filter(s => !skillOk(s));
   if (weak.length) reasons.push(`Grammar to bring up to 85%: ${weak.map(s => s.name).join(', ')}`);
   if (bestRecent == null || bestRecent < 27) reasons.push(bestRecent == null ? (bestWin == null ? 'No mock quiz yet' : `Take a fresh mock quiz (last one was over 2 days ago)`) : `Mock quiz ${Math.round(bestRecent * 10) / 10}/30 (need 27)`);

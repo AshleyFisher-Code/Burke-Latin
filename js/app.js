@@ -2,7 +2,7 @@ import { auth, db, doc, setDoc, onSnapshot, onAuthStateChanged, signInWithEmailA
 import { STUDENT_UID, PARENT_UID, APP_VERSION } from './config.js';
 import { WORDS, W, STAGES, MAX_STAGE, STAGE_NAMES } from './data.js';
 import { SKILLS, SKILL } from './gen.js';
-import { cardFromSpec, buildDaily, buildReview, buildLearn, buildTrouble, troubleWords, buildSkill, buildTestRun, buildMock, buildMastery, followUp, stageOf } from './session.js';
+import { cardFromSpec, buildDaily, buildReview, buildLearn, buildUnit, buildTrouble, troubleWords, buildSkill, buildTestRun, buildMock, buildMastery, followUp, stageOf } from './session.js';
 import { dayNum, isoFromDay, dayFromISO, blankState, updateWord, updateSkill, touchWords, completeDay, streakView, rankFor, nextMilestone, milestones,
   nextQuiz, readiness, isMasteryDay, wordStatus, STATUS_LABEL, skillStatus, skillAcc } from './srs.js';
 
@@ -134,6 +134,7 @@ function renderHome() {
     v.done ? h('button', { class: 'btn done', onclick: () => start(buildDaily(S, settings, t, q)) }, h('b', { text: `${daily} done ✓` }), h('span', { text: 'Want more? Run another round (streak already counted).' }))
       : h('button', { class: 'btn hero', onclick: () => start(buildDaily(S, settings, t, q)) }, h('b', { text: `Start ${daily.toLowerCase().replace("today's", "today's")}` }),
         h('span', { text: daily === 'Mastery Check' ? 'Every 10th day: a no-hints check of your whole word bank · about 10 min' : daily === 'Quiz prep' ? 'Unconfirmed quiz words + weak grammar · about 12 min' : 'About 25 cards · 10–12 min' })),
+    (() => { const st = stageOf(settings), n = WORDS.filter(w => w.stage === st).length; return h('button', { class: 'btn', onclick: () => start(buildUnit(st)) }, h('b', { text: `Unit ${st} vocab` }), h('span', { text: `Just this unit's ${n} words, both directions · extra practice` })); })(),
     streakCard(),
     h('div', { class: 'tiles' },
       h('button', { class: 'tile', onclick: () => go('vocab') }, h('b', { text: 'Vocab' }), h('span', { text: `${dueN} due · ${shaky} shaky` })),
