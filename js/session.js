@@ -1,20 +1,22 @@
 // Builds practice sessions as lists of small, saveable "specs", and turns specs back into cards.
 import { WORDS, W, MAX_STAGE } from './data.js';
-import { vocabL2E, vocabE2L, vocabAlso, gNID, gChart, gAgree, gPhrase, gFixPhrase, gVnum, gSV, gComp, gRole, gTrans, gFixSent,
+import { vocabL2E, vocabPick, pickOpts, gNID, gChart, gAgree, gPhrase, gFixPhrase, gVnum, gSV, gComp, gRole, gTrans, gFixSent,
   makeSkillCard, SKILLS, SKILL, CHARTS, shuffle, pickOne, PL_NOUNS, randomSentenceSpec, PHRASE_ADJS, PERSONS, NOUNS, COMP_ADJS } from './gen.js';
 import { wordStatus, skillAcc, quizWords, quizSkills, isMasteryDay } from './srs.js';
 
 const BUILD = { nid: gNID, chart: gChart, agree: gAgree, phrase: gPhrase, fixphrase: gFixPhrase, vnum: gVnum, sv: gSV, comp: gComp, role: gRole, trans: gTrans, fixsent: gFixSent };
 export function cardFromSpec(sp) {
   let c;
-  if (sp.t === 'l2e') c = vocabL2E(W[sp.id]);
-  else if (sp.t === 'e2l') c = (sp.id === 'etiam' || sp.id === 'quoque') ? vocabAlso() : vocabE2L(W[sp.id]);
-  else if (sp.t === 'also') c = vocabAlso();
+  // He only ever reads Latin and answers in English. Old saved English→Latin cards are shown as Latin→English.
+  if (sp.t === 'l2e' || sp.t === 'e2l') c = vocabL2E(W[sp.id]);
+  else if (sp.t === 'also') c = vocabL2E(W.etiam);
+  else if (sp.t === 'pick') c = vocabPick(W[sp.id], sp.opts);
   else c = BUILD[sp.type](...sp.params);
   c.spec = sp; return c;
 }
 const gSpec = card => ({ t: 'g', type: card.type, params: card.params, skill: card.skill });
-export const vocabSpec = (id, dir) => ({ t: dir, id, cid: 'w:' + id });
+export const vocabSpec = (id, dir = 'l2e') => (dir === 'pick' ? pickSpec(id) : { t: 'l2e', id, cid: 'w:' + id });
+export const pickSpec = id => ({ t: 'pick', id, cid: 'w:' + id, opts: pickOpts(W[id]) });
 
 // Prefer words that haven't shown up in a while (vocab or grammar), so examples cover the whole bank.
 export function makePicker(state) {
@@ -22,7 +24,7 @@ export function makePicker(state) {
   return list => { if (!list.length) return undefined; const s = list.slice().sort((a, b) => age(a.id) - age(b.id)); const k = Math.max(2, Math.ceil(s.length / 3)); return pickOne(s.slice(0, k)); };
 }
 export const stageOf = settings => Math.min(MAX_STAGE, (settings && settings.currentStage) || MAX_STAGE);
-function dirFor(ws) { if (!ws || ws.lvl <= 1) return 'l2e'; return Math.random() < 0.5 ? 'l2e' : 'e2l'; }
+function dirFor() { return 'l2e'; }
 function skillCards(state, settings, n, stageCap, focusStage) {
   const pick = makePicker(state);
   const skills = SKILLS.filter(s => s.stage <= stageCap);
@@ -62,7 +64,7 @@ export function buildMastery(state, today, stage) {
   const others = shuffle(bank.filter(w => !known.includes(w)));
   const list = known.concat(others).slice(0, 30);
   return { mode: 'mastery', title: 'Mastery Check', test: true, counts: true,
-    specs: shuffle(list.map(w => vocabSpec(w.id, Math.random() < 0.5 ? 'l2e' : 'e2l'))) };
+    specs: shuffle(list.map(w => vocabSpec(w.id, 'l2e'))) };
 }
 export function buildQuizPrep(state, settings, today, quiz) {
   const winStart = quiz.day - 4;
@@ -70,7 +72,7 @@ export function buildQuizPrep(state, settings, today, quiz) {
   const unconf = qw.filter(w => { const ws = state.words[w.id]; return !(ws && ws.confirmed != null && ws.confirmed >= winStart && ws.lastOk); });
   const due = WORDS.filter(w => w.stage <= quiz.stage && !unconf.includes(w) && state.words[w.id] && state.words[w.id].seen && state.words[w.id].due <= today); // older words stay in review
   const vocab = shuffle(unconf).slice(0, 22).concat(shuffle(due).slice(0, Math.max(0, 22 - unconf.length)));
-  const vspecs = vocab.map(w => vocabSpec(w.id, Math.random() < 0.5 ? 'l2e' : 'e2l'));
+  const vspecs = vocab.map(w => vocabSpec(w.id, 'l2e'));
   const g = skillCards(state, settings, 6, quiz.stage, quiz.stage);
   return { mode: 'quizprep', title: 'Quiz prep', specs: interleave(vspecs, g), counts: true };
 }
@@ -85,8 +87,8 @@ export function buildReview(state, settings, today) {
 export function buildUnit(stage) { const s = buildLearn(stage); return { ...s, mode: 'unit', title: `Unit ${stage} vocab` }; }
 export function buildLearn(stage) {
   const ws = WORDS.filter(w => w.stage === stage);
-  const a = shuffle(ws).map(w => vocabSpec(w.id, 'l2e'));
-  const b = shuffle(ws.filter(w => w.id !== 'quoque')).map(w => vocabSpec(w.id, 'e2l'));
+  const a = shuffle(ws).map(w => pickSpec(w.id)); // first see it: tap the meaning
+  const b = shuffle(ws).map(w => vocabSpec(w.id, 'l2e')); // then type the meaning
   return { mode: 'learn', title: `Learn Stage ${stage}`, specs: a.concat(b) };
 }
 export function troubleWords(state, settings) {
@@ -108,8 +110,9 @@ export function buildSkill(state, settings, skillId, n = 12) {
 
 /* ---------- follow-ups (misses come back, asked a different way) ---------- */
 export function followUp(sp, state, settings) {
-  if (sp.t === 'l2e') return { ...vocabSpec(sp.id, 'e2l'), follow: true };
-  if (sp.t === 'e2l' || sp.t === 'also') return { ...vocabSpec(sp.t === 'also' ? pickOne(['etiam', 'quoque']) : sp.id, 'l2e'), follow: true };
+  if (sp.t === 'l2e' || sp.t === 'e2l') return { ...pickSpec(sp.id), follow: true }; // comes back as tap-the-meaning
+  if (sp.t === 'pick') return { ...vocabSpec(sp.id, 'l2e'), follow: true };
+  if (sp.t === 'also') return { ...pickSpec(pickOne(['etiam', 'quoque'])), follow: true };
   const c = makeSkillCard(sp.skill || sp.type, makePicker(state), stageOf(settings));
   return { ...gSpec(c), follow: true };
 }
@@ -120,7 +123,7 @@ export function buildTestRun(state, settings, stage) {
   const bank = WORDS.filter(w => w.stage <= stage);
   const shaky = bank.filter(w => { const s = state.words[w.id]; return s && s.seen && (s.lvl <= 2 || s.slipped != null); });
   const vocabPool = shuffle(shaky).concat(shuffle(bank.filter(w => !shaky.includes(w))));
-  const specs = vocabPool.slice(0, 6).map(w => vocabSpec(w.id, Math.random() < 0.5 ? 'l2e' : 'e2l'));
+  const specs = vocabPool.slice(0, 6).map(w => vocabSpec(w.id, 'l2e'));
   const skills = SKILLS.filter(s => s.stage <= stage).sort((a, b) => (skillAcc(state, a.id) ?? 0) - (skillAcc(state, b.id) ?? 0)).slice(0, 4);
   skills.forEach(s => specs.push(gSpec(makeSkillCard(s.id, pick, stage))));
   return { mode: 'testrun', title: 'Test Run', test: true, specs: shuffle(specs) };

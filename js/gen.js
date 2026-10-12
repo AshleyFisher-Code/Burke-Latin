@@ -2,23 +2,28 @@
 // the random pickers below choose parameters, preferring words he hasn't seen in a while.
 import { WORDS, W, letters } from './data.js';
 import { G, gradeMiddle, gradeMeaning, gradeOtherForm, gradeLatin, gradeAlso, gradeNID, gradeNumber, pack,
-  latTokens, sameBag, enKey, normEn } from './grade.js';
+  latTokens, sameBag, enKey, normEn, fuzzyEn } from './grade.js';
 
 export const pickOne = a => a[Math.floor(Math.random() * a.length)];
 export const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
 const proper = s => s.replace(/\broman\b/g, 'Roman').replace(/\brome\b/g, 'Rome');
 const decl = w => (w.gen === 'ae' ? '1st' : '2nd');
+// Same card always shows its buttons in the same order (cards are rebuilt from saved specs).
+const seeded = (arr, seed) => { let h = 2166136261; for (const ch of JSON.stringify(seed)) h = Math.imul(h ^ ch.charCodeAt(0), 16777619) >>> 0;
+  const a = arr.slice(); for (let i = a.length - 1; i > 0; i--) { h = Math.imul(h ^ (h >>> 15), 2246822507) >>> 0; const j = h % (i + 1); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const uniq = arr => { const seen = new Set(); return arr.filter(x => { const k = letters(x); if (seen.has(k)) return false; seen.add(k); return true; }); };
+const adjChoices = (a, seed) => seeded(uniq([a.forms.m.sg, a.forms.f.sg, a.forms.m.pl, a.forms.f.pl]), seed);
 
 /* =============== vocabulary cards =============== */
 export function vocabL2E(w) {
   const second = w.kind !== 'x';
   return {
     type: 'l2e', cid: 'w:' + w.id, words: [w.id], hook: w.hook, stage: w.stage,
-    instr: w.kind === 'x' ? 'What does it mean?' : w.kind === 'v' ? `Meaning, then the ${w.num === 'sg' ? 'plural' : 'singular'} form.` : 'Meaning, then the middle stuff.',
+    instr: w.kind === 'x' ? 'What does it mean?' : w.kind === 'v' ? 'Meaning, then tap singular or plural.' : 'Meaning, then the middle stuff.',
     prompt: { latin: w.lemma },
-    fields: [{ label: 'Meaning', ph: 'English' }].concat(second ? [{ label: w.kind === 'v' ? (w.num === 'sg' ? 'Plural form' : 'Singular form') : 'Middle stuff', ph: w.kind === 'v' ? 'Latin' : 'middle stuff' }] : []),
-    check: v => pack(second ? [gradeMeaning(v[0], w), w.kind === 'v' ? gradeOtherForm(v[1], w) : gradeMiddle(v[1], w)] : [gradeMeaning(v[0], w)]),
+    fields: [{ label: 'Meaning', ph: 'English' }].concat(second ? [w.kind === 'v' ? { label: 'Number', choices: ['singular', 'plural'] } : { label: 'Middle stuff', ph: 'middle stuff' }] : []),
+    check: v => pack(second ? [gradeMeaning(v[0], w), w.kind === 'v' ? gradeVerbNum(v[1], w) : gradeMiddle(v[1], w)] : [gradeMeaning(v[0], w)]),
     correct: vocabAnswer(w), summary: w.lemma,
   };
 }
@@ -41,8 +46,30 @@ export function vocabAlso() {
     check: v => gradeAlso(v[0], v[1]), correct: 'etiam and quoque', summary: 'also → both Latin words',
   };
 }
+function gradeVerbNum(v, w) {
+  const r = gradeNumber(v, w.num); if (r.ok || !v) return r;
+  return { ok: false, hint: w.id === 'est' ? 'est is singular (is). sunt is the plural (are).' : w.id === 'sunt' ? 'sunt is plural (are). est is the singular (is).' : w.num === 'sg' ? `${w.lemma} ends in -t, so it's singular.` : `${w.lemma} ends in -nt, so it's plural.` };
+}
+// Tap the meaning. opts = ids of the other words to show (picked by the session, saved in the spec).
+export function vocabPick(w, opts) {
+  const all = seeded([w.id, ...opts], [w.id, ...opts]).map(id => W[id]);
+  return {
+    type: 'pick', cid: 'w:' + w.id, words: [w.id], hook: w.hook, stage: w.stage,
+    instr: 'Tap what it means.', prompt: { latin: w.lemma },
+    fields: [{ label: 'Meaning', choices: all.map(x => x.show) }],
+    check: v => ({ ok: [v[0] === w.show], hints: v[0] && v[0] !== w.show ? [`${w.lemma} means ${w.show}.`] : [], notes: [] }),
+    correct: `${w.lemma}: ${w.show}`, summary: w.lemma,
+  };
+}
+// Distractors for vocabPick: same kind of word, meaning doesn't overlap.
+export function pickOpts(w) {
+  const mine = new Set(w.mean.map(normEn));
+  const pool = WORDS.filter(x => x.id !== w.id && x.show !== w.show && !x.mean.some(m => mine.has(normEn(m))));
+  const same = shuffle(pool.filter(x => x.kind === w.kind)), other = shuffle(pool.filter(x => x.kind !== w.kind));
+  return same.concat(other).slice(0, 3).map(x => x.id);
+}
 export function vocabAnswer(w) {
-  if (w.kind === 'v') return `${w.lemma}: ${w.show}  (${w.num === 'sg' ? 'plural' : 'singular'}: ${w.pair})`;
+  if (w.kind === 'v') return `${w.lemma}: ${w.show}  (${w.num === 'sg' ? 'singular' : 'plural'})`;
   if (w.kind === 'x') return `${w.lemma}: ${w.show}`;
   return `${w.entry}: ${w.show}`;
 }
@@ -86,7 +113,7 @@ export function gNID(id, num) {
   return {
     type: 'nid', skill: 'nid', cid: 'g:nid', words: [id], stage: w.stage,
     instr: 'Number, gender and declension.', prompt: { latin: form },
-    fields: [{ label: 'Number', ph: 'sg / pl', narrow: true }, { label: 'Gender', ph: 'masc / fem', narrow: true }, { label: 'Declension', ph: '1 / 2', narrow: true }],
+    fields: [{ label: 'Number', choices: ['singular', 'plural'] }, { label: 'Gender', choices: ['masculine', 'feminine'] }, { label: 'Declension', choices: ['1st', '2nd'] }],
     check: v => gradeNID(v, w, num),
     correct: `${form}: ${num === 'sg' ? 'singular' : 'plural'}, ${G(w.g)}, ${decl(w)} declension  (${w.entry})`, summary: `Noun ID: ${form}`, params: [id, num],
   };
@@ -102,8 +129,8 @@ export function gChart(cid) {
   const c = CHARTS.find(x => x.id === cid);
   return {
     type: 'chart', skill: 'charts', cid: 'g:charts', words: [], stage: c.stage,
-    instr: 'Fill in the endings.', prompt: { chart: c.title },
-    fields: [{ label: 'Singular', ph: 'ending', narrow: true }, { label: 'Plural', ph: 'ending', narrow: true }],
+    instr: 'Tap the endings.', prompt: { chart: c.title },
+    fields: (opts => [{ label: 'Singular', choices: opts }, { label: 'Plural', choices: opts }])(c.id === 'vb' ? ['-t', '-nt'] : ['-a', '-ae', '-us', '-ī']),
     check: v => {
       const s = letters(v[0]), p = letters(v[1]);
       const ok = [s === letters(c.sg) || (c.sgAlso || []).includes(s), p === letters(c.pl)];
@@ -119,8 +146,8 @@ export function gAgree(nid, num, aid) {
   const n = W[nid], a = W[aid], form = nForm(n, num), want = aForm(a, n.g, num);
   return {
     type: 'agree', skill: 'agree', cid: 'g:agree', words: [nid, aid], stage: Math.max(n.stage, a.stage),
-    instr: 'Give the adjective the ending that matches the noun.', prompt: { latin: `${form} ___`, sub: `(${a.lemma})` },
-    fields: [{ label: 'Adjective', ph: 'Latin' }],
+    instr: 'Tap the adjective that matches the noun.', prompt: { latin: `${form} ___`, sub: `(${a.lemma})` },
+    fields: [{ label: 'Adjective', choices: adjChoices(a, [nid, num, aid]) }],
     check: v => {
       const t = letters(v[0]); const ok = t === letters(want);
       return { ok: [ok], hints: ok || !t ? [] : [`${form} is ${G(n.g)} ${num === 'sg' ? 'singular' : 'plural'}, so the adjective needs the ${G(n.g)} ${num === 'sg' ? 'singular' : 'plural'} ending: ${want}.${n.trap ? ` (${n.lemma} is 1st declension but masculine.)` : ''}`], notes: [] };
@@ -141,6 +168,7 @@ export function gPhrase(nid, num, aid, adjFirst = false) {
     check: v => {
       const k = enKey(v[0]); if (accepted.includes(k)) return { ok: [true], hints: [], notes: [] };
       const k2 = enKey(v[0].replace(/['’]s\b/g, 's')); if (accepted.includes(k2)) return { ok: [true], hints: [], notes: ['No apostrophe for a plural: ' + nEn(n, num)[0] + '.'] };
+      const fz = fuzzyEn(k2, accepted, otherAcc); if (fz) return { ok: [true], hints: [], notes: [`Spelled: ${proper(fz)}`] };
       const hints = [];
       if (otherAcc.includes(k)) hints.push(num === 'pl' ? `${nf} is plural, so the English is plural: ${nEn(n, 'pl')[0]}.` : `${nf} is singular, so the English is singular: ${n.mean[0]}.`);
       else if (k && k.split(' ').length >= 2 && accepted.some(x => x.split(' ').reverse().join(' ') === k)) hints.push('In English the adjective comes before the noun.');
@@ -156,8 +184,8 @@ export function gFixPhrase(nid, num, aid, wrongKind) {
   const bad = wrongKind === 'g' ? aForm(a, n.g === 'm' ? 'f' : 'm', num) : aForm(a, n.g, num === 'sg' ? 'pl' : 'sg');
   return {
     type: 'fixphrase', skill: 'fixphrase', cid: 'g:fixphrase', words: [nid, aid], stage: Math.max(n.stage, a.stage),
-    instr: 'There\'s an agreement error. Type the corrected phrase.', prompt: { latin: `“${nf} ${bad}”` },
-    fields: [{ label: 'Corrected phrase', ph: 'Latin' }],
+    instr: 'There\'s an agreement error. Tap the corrected phrase.', prompt: { latin: `“${nf} ${bad}”` },
+    fields: [{ label: 'Corrected phrase', choices: seeded(uniq([good, ...adjChoices(a, 0)]).filter(f => letters(f) !== letters(bad)).slice(0, 3).map(f => `${nf} ${f}`), [nid, num, aid, wrongKind]) }],
     check: v => {
       const t = latTokens(v[0]); const ok = sameBag(t, [letters(nf), letters(good)]);
       const hints = [];
@@ -185,9 +213,12 @@ export function gVnum(vid, num) {
   return {
     type: 'vnum', skill: 'vnum', cid: 'g:vnum', words: [vw.id === 'sunt' ? 'est' : vw.id], stage: 2,
     instr: 'Singular or plural? Then translate it.', prompt: { latin: form },
-    fields: [{ label: 'Number', ph: 'sg / pl', narrow: true }, { label: 'English', ph: 'English' }],
+    fields: [{ label: 'Number', choices: ['singular', 'plural'] }, { label: 'English', ph: 'English' }],
     check: v => {
-      const r0 = gradeNumber(v[0], num); const e = normEn(v[1]); const ok1 = accepted.has(e);
+      const r0 = { ...gradeNumber(v[0], num) }; const e = normEn(v[1]);
+      const otherAll = otherEn.flatMap(x => [x, ...(num === 'sg' ? ['they ' + x] : ['he ' + x, 'she ' + x, 'it ' + x])]);
+      const fz = !accepted.has(e) && fuzzyEn(e, [...accepted], otherAll); const ok1 = accepted.has(e) || !!fz;
+      if (fz) r0.note = (r0.note ? r0.note + ' ' : '') + `Spelled: ${fz}`;
       const hints = [];
       if (!r0.ok) hints.push(num === 'sg' ? `${form} ends in -t, so it's singular.` : `${form} ends in -nt, so it's plural.`);
       if (!ok1 && e && otherEn.includes(e.replace(/^(he|she|it|they) /, ''))) hints.push(`That's the ${num === 'sg' ? 'plural' : 'singular'} English. ${form} is ${num === 'sg' ? 'singular' : 'plural'}: ${en[0]}.`);
@@ -201,8 +232,8 @@ export function gSV(subjIds, num, vid) {
   const s = subj(subjIds, num), vw = W[vid], want = s.num === 'sg' ? vw.lemma : vw.pair;
   return {
     type: 'sv', skill: 'sv', cid: 'g:sv', words: [...subjIds, vid], stage: 2,
-    instr: 'Pick the verb form that agrees with the subject.', prompt: { latin: `${s.latin} ___`, sub: `(${vw.lemma} / ${vw.pair})` },
-    fields: [{ label: 'Verb', ph: 'Latin' }],
+    instr: 'Tap the verb that agrees with the subject.', prompt: { latin: `${s.latin} ___` },
+    fields: [{ label: 'Verb', choices: [vw.lemma, vw.pair] }],
     check: v => {
       const t = letters(v[0]); const ok = t === letters(want); const hints = [];
       if (!ok && t) hints.push(s.compound ? 'Two singular nouns joined by et count as a plural subject, so the verb ends in -nt.' : `${s.latin} is ${s.num === 'sg' ? 'singular → the verb ends in -t' : 'plural → the verb ends in -nt'}.${vw.id === 'est' ? ' (est is singular, sunt is plural.)' : ''}`);
@@ -215,8 +246,8 @@ export function gComp(subjIds, num, aid) {
   const s = subj(subjIds, num), a = W[aid], want = aForm(a, s.g, s.num);
   return {
     type: 'comp', skill: 'comp', cid: 'g:comp', words: [...subjIds, aid], stage: 2,
-    instr: 'The complement agrees with the subject. Give the right ending.', prompt: { latin: `${s.latin} ${LV(s.num)} ___`, sub: `(${a.lemma})` },
-    fields: [{ label: 'Complement', ph: 'Latin' }],
+    instr: 'The complement agrees with the subject. Tap the right one.', prompt: { latin: `${s.latin} ${LV(s.num)} ___`, sub: `(${a.lemma})` },
+    fields: [{ label: 'Complement', choices: adjChoices(a, [subjIds, num, aid]) }],
     check: v => {
       const t = letters(v[0]); const ok = t === letters(want); const hints = [];
       if (!ok && t) {
@@ -235,8 +266,8 @@ export function gRole(nid, num, aid, order, ask) {
   const want = ask === 'subject' ? S : C, other = ask === 'subject' ? C : S;
   return {
     type: 'role', skill: 'role', cid: 'g:role', words: [nid, aid], stage: 2,
-    instr: `Type the ${ask.toUpperCase()} of this sentence.`, prompt: { latin: cap(words.join(' ')) + '.' },
-    fields: [{ label: cap(ask), ph: 'Latin word' }],
+    instr: `Tap the ${ask.toUpperCase()} of this sentence.`, prompt: { latin: cap(words.join(' ')) + '.' },
+    fields: [{ label: cap(ask), choices: words }],
     check: v => {
       const t = letters(v[0]); const ok = t === letters(want); const hints = [];
       if (!ok && t === letters(other)) hints.push(ask === 'subject' ? `${C} is the complement: it describes the subject. The subject is the noun being described: ${S}.` : `${S} is the subject (the noun). The complement is the word that describes it: ${C}.`);
@@ -280,6 +311,7 @@ export function gTrans(spec) {
     check: v => {
       const k = enKey(v[0]); if (st.accepted.includes(k)) return { ok: [true], hints: [], notes: [] };
       const k2 = enKey(v[0].replace(/['’]s\b/g, 's')); if (st.accepted.includes(k2)) return { ok: [true], hints: [], notes: ['No apostrophe for a plural.'] };
+      const fz = fuzzyEn(k2, st.accepted, flip ? flip.accepted : []); if (fz) return { ok: [true], hints: [], notes: [`Spelled: ${proper(fz)}`] };
       const hints = [], toks = k.split(' ');
       if (flip && flip.accepted.includes(k)) hints.push(spec.num === 'pl' ? `The subject is plural (${st.s.latin}), so the English is plural: "${st.correct}"` : `The subject is singular (${st.s.latin}), so the English is singular.`);
       else if (spec.k !== 'act' && !toks.includes('is') && !toks.includes('are') && k) hints.push(`${spec.num === 'sg' && !st.s.compound ? 'est' : 'sunt'} is a linking verb, so the English needs "${st.s.num === 'sg' ? 'is' : 'are'}" between the subject and the complement.`);
@@ -305,8 +337,8 @@ export function gFixSent(spec, err) {
   const badLatin = cap(bad.join(' ')) + '.';
   return {
     type: 'fixsent', skill: 'fixsent', cid: 'g:fixsent', words: st.latWords.map(x => (NFL[letters(x)] || {}).id).filter(Boolean), stage: 2,
-    instr: 'There\'s one grammar error. Type the corrected sentence.', prompt: { latin: badLatin },
-    fields: [{ label: 'Corrected sentence', ph: 'Latin', wide: true }],
+    instr: 'There\'s one grammar error. Tap the corrected sentence.', prompt: { latin: badLatin },
+    fields: [{ label: 'Corrected sentence', choices: fixSentChoices(st, spec, err, badLatin) }],
     check: v => {
       const t = latTokens(v[0]); const ok = sameBag(t, good); const hints = [];
       if (!ok && t.length) {
@@ -319,6 +351,21 @@ export function gFixSent(spec, err) {
     },
     correct: cap(st.latWords.join(' ')) + '.', summary: `Fix: ${badLatin}`, params: [spec, err],
   };
+}
+function fixSentChoices(st, spec, err, badLatin) {
+  const good = cap(st.latWords.join(' ')) + '.', s = st.s, out = [good];
+  if (spec.k === 'adj') { // every other form of the adjective (the bad one is the prompt, so leave it out)
+    const a = W[spec.a], i = st.latWords.indexOf(aForm(a, s.g, s.num));
+    for (const f of uniq([a.forms.m.sg, a.forms.f.sg, a.forms.m.pl, a.forms.f.pl])) { const w = st.latWords.slice(); w[i] = f; out.push(cap(w.join(' ')) + '.'); }
+  }
+  if (err === 'verb' || spec.k === 'adj') { // change the verb instead of the complement: still wrong
+    const w = st.latWords.slice(), i = w.findIndex(x => x === 'est' || x === 'sunt'); w[i] = w[i] === 'est' ? 'sunt' : 'est'; out.push(cap(w.join(' ')) + '.');
+  }
+  if (spec.k === 'noun') { // complement in the other number: still wrong
+    const c = W[spec.c], w = st.latWords.slice(), cur = s.num === 'sg' ? c.lemma : c.pl, i = w.indexOf(cur); w[i] = s.num === 'sg' ? c.pl : c.lemma; out.push(cap(w.join(' ')) + '.');
+  }
+  const opts = uniq(out).filter(x => letters(x) !== letters(badLatin));
+  return seeded([good].concat(opts.filter(x => x !== good).slice(0, 2)), [spec, err]);
 }
 const NFL = {}; WORDS.forEach(w => { NFL[letters(w.lemma)] = w; if (w.pl) NFL[letters(w.pl)] = w; if (w.forms && w.kind === 'a') for (const g of ['m', 'f']) for (const k of ['sg', 'pl']) NFL[letters(w.forms[g][k])] = w; if (w.kind === 'v') NFL[letters(w.pair)] = w; });
 // gender twins for noun complements

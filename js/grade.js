@@ -19,6 +19,55 @@ export const lev = (a, b) => {
   return d[m][n];
 };
 export const G = g => (g === 'f' ? 'feminine' : 'masculine');
+/* ---------- generous English spelling (Burke has dysgraphia: grade the meaning, not the spelling) ---------- */
+// Compare sounds-alike-ish: letters only, doubled letters collapsed (hapy = happy, tierd = tired).
+export const phon = s => (s || '').toLowerCase().replace(/[^a-z]/g, '').replace(/(.)\1+/g, '$1');
+const thr = n => (n <= 3 ? 1 : n <= 6 ? 2 : 3);
+// Every English word the app uses as an answer, plus plurals. A typed word that IS one of these is never
+// treated as a misspelling of a different word (man is not a misspelling of bad).
+export const EN_TOKENS = new Set();
+const addTok = s => normEn(s).split(/[\s\/,]+/).filter(Boolean).forEach(t => EN_TOKENS.add(t));
+WORDS.forEach(w => { w.mean.forEach(addTok); addTok(w.show); (w.enPl || []).forEach(addTok); (w.wrongNum || []).forEach(addTok); if (w.base) addTok(w.base); if (w.prog) addTok(w.prog); });
+['is', 'are', 'not', 'and', 'he', 'she', 'it', 'they', 'women', 'men', 'girls', 'boys'].forEach(t => EN_TOKENS.add(t));
+// Small grammar words carry number/meaning, so they must be right (doubled letters forgiven).
+const FUNC = new Set(['is', 'are', 'not', 'and', 'he', 'she', 'it', 'they']);
+// Is typed word x close enough to target t? Ties go to the target; a closer (or exact) other word wins.
+// Consonant skeleton, for sound-alike spellings (rode = road, grate = great, rites = writes).
+export const sKey = s => {
+  const t = (s || '').toLowerCase().replace(/[^a-z]/g, '').replace(/^wr/, 'r').replace(/^kn/, 'n').replace(/ph/g, 'f').replace(/ck/g, 'k')
+    .replace(/gh/g, '').replace(/c(?=[eiy])/g, 's').replace(/c/g, 'k').replace(/z/g, 's').replace(/(.)\1+/g, '$1');
+  return t.charAt(0) + t.slice(1).replace(/[aeiouy]/g, '');
+};
+export function closeWord(x, t, contrast = []) {
+  if (x === t || phon(x) === phon(t)) return true;
+  const px = phon(x), pt = phon(t); if (!px) return false;
+  if (EN_TOKENS.has(x)) return false;
+  const d = lev(px, pt);
+  const k = sKey(x);
+  if (pt.length >= 3 && k.length >= 2 && k === sKey(t) && !contrast.some(c => c !== t && sKey(c) === k && lev(px, phon(c)) < d)) return true;
+  if (d > thr(pt.length)) return false;
+  for (const c of contrast) if (c !== t && lev(px, phon(c)) < d) return false;
+  return true;
+}
+// Token-by-token match of a typed English answer against accepted answers (already normalised).
+// contrast: answers that must NOT be accepted (e.g. the other number), used to keep girl vs girls strict.
+export function fuzzyEn(input, accepted, contrast = []) {
+  const it = input.split(' ').filter(Boolean); if (!it.length) return null;
+  const cts = contrast.map(c => c.split(' '));
+  outer: for (const a of accepted) {
+    const at = a.split(' '); if (at.length !== it.length) continue;
+    for (let i = 0; i < at.length; i++) {
+      const x = it[i], t = at[i];
+      if (x === t) continue;
+      if (at.length > 1 && (FUNC.has(t) || FUNC.has(x))) { if (phon(x) === phon(t)) continue; continue outer; }
+      const local = cts.filter(c => c.length === at.length).map(c => c[i]).filter(c => c !== t);
+      if (!closeWord(x, t, local.concat([...EN_TOKENS].filter(e => Math.abs(e.length - t.length) <= 3)))) continue outer;
+    }
+    return a;
+  }
+  return null;
+}
+
 const OK = { ok: true };
 
 /* lookups */
@@ -65,11 +114,17 @@ export function gradeMeaning(v, w) {
   if (n !== 'or') { const parts = n.split(/\s*(?:\/|,|\bor\b|\band\b)\s*/).map(s => s.trim()).filter(Boolean); if (parts.length > 1 && parts.every(match)) return full; }
   if (w.kind === 'v' && w.wrongNum.map(normEn).includes(n))
     return { ok: false, hint: w.num === 'sg' ? `${w.lemma} ends in -t, so it's singular. Use the singular English: ${w.show} (he/she ${w.show}).` : `${w.lemma} ends in -nt, so it's plural: ${w.show}.` };
+  // woman/women and man/men sound alike: count it, just show the singular.
   const pl = { woman: 'women', man: 'men' };
-  if (w.kind === 'n') for (const a of accs) if (n === a + 's' || n === pl[a]) return { ok: false, hint: `"${n}" is plural, but ${w.lemma} is singular. Singular in Latin means singular in English: ${a}.` };
+  if (w.kind === 'n') for (const a of accs) if (pl[a] && n === pl[a]) return { ok: true, note: `One ${a}. (Spelled ${a}.)` };
+  if (w.kind === 'n') for (const a of accs) if (n === a + 's' || n === a + 'es') return { ok: false, hint: `"${n}" is plural, but ${w.lemma} is singular. Singular in Latin means singular in English: ${a}.` };
   if (w.near && w.near[n]) return { ok: false, hint: w.near[n] };
   const o = REV[n]; if (o && o !== w.lemma && !accs.includes(n)) return { ok: false, hint: `"${n}" is what ${o} means. ${w.lemma} means ${w.show}.` };
-  if (!REV[n]) { const k = w.mean.findIndex(m => normEn(m).length >= 5 && lev(normEn(m), n) <= 1); if (k >= 0) return { ok: true, note: `Spelling: ${w.mean[k]}` }; }
+  // Generous spelling: hours = horse? no. morse/hors/hapy/tierd = yes.
+  const own = (w.enPl || []).map(normEn).concat((w.wrongNum || []).map(normEn));
+  const hit = fuzzyEn(n, accs, own);
+  if (hit) return { ok: true, note: `Spelled: ${hit}` };
+  if (n !== 'or') { const parts = n.split(/\s*(?:\/|,|\bor\b|\band\b)\s*/).map(s => s.trim()).filter(Boolean); if (parts.length > 1 && parts.every(p => match(p) || fuzzyEn(p, accs, own))) return full; }
   return { ok: false };
 }
 export function gradeOtherForm(v, w) {

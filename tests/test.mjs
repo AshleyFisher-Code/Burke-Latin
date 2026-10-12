@@ -1,5 +1,6 @@
 // Exhaustive answer-key check. Run: node tests/test.mjs
 import { WORDS, W, fold, letters } from '../js/data.js';
+import { normEn } from '../js/grade.js';
 import { AF, NF } from '../js/grade.js';
 import * as g from '../js/gen.js';
 import { cardFromSpec, buildDaily, buildMock, buildLearn, buildSkill, buildTestRun, buildMastery } from '../js/session.js';
@@ -11,23 +12,19 @@ const assert = (c, msg) => { n++; if (!c) fails.push('ASSERT ' + msg); };
 
 /* ---------- vocab ---------- */
 const mids = w => {
-  if (w.kind === 'v') return [w.pair, w.pair.toUpperCase(), fold(w.pair)];
+  if (w.kind === 'v') return w.num === 'sg' ? ['singular', 'Singular'] : ['plural', 'Plural'];
   if (w.kind === 'a') return w.rest ? [w.rest, 'altera alterum', `${w.lemma}, ${w.rest}`] : ['-a -um', '-a, -um', 'a um', 'a-um', `${w.lemma} -a -um`];
   return w.gen === 'ae' ? [`-ae ${w.g}`, `-ae, ${w.g}`, `ae ${w.g}`, `${w.lemma} -ae ${w.g}`, `ae-${w.g}`] : [`-ī ${w.g}`, `-i ${w.g}`, `-i, ${w.g}`, `${w.lemma} -ī ${w.g}`, `I - ${w.g}`];
 };
 for (const w of WORDS) {
   const means = w.mean.concat([w.show, w.show.toUpperCase(), 'the ' + w.mean[0]]);
   if (w.kind === 'v') means.push('he ' + w.mean[0], 'she ' + w.mean[0]);
-  const c1 = g.vocabL2E(w), c2 = g.vocabE2L(w);
+  const c1 = g.vocabL2E(w);
   for (const m of means) { if (w.kind === 'x') ok(c1, [m], true); else for (const mid of mids(w)) ok(c1, [m, mid], true); }
   ok(c1, w.kind === 'x' ? [w.correct || ''] : ['zzz', mids(w)[0]], false, 'neg ' + w.lemma);
-  if (w.id === 'etiam' || w.id === 'quoque') continue;
-  const lats = w.forms && w.kind === 'x' ? ['quī/quae', 'qui quae', 'quae, qui'] : [w.lemma, w.lemma.toUpperCase(), fold(w.lemma) + ' '];
-  for (const L of lats) { if (w.kind === 'x') ok(c2, [L], true); else for (const mid of mids(w)) ok(c2, [L, mid], true); }
 }
-for (const [a, b] of [['etiam', 'quoque'], ['quoque', 'etiam'], ['ETIAM', 'quoque.']]) ok(g.vocabAlso(), [a, b], true);
-for (const [a, b] of [['etiam', 'etiam'], ['iam', 'quoque']]) ok(g.vocabAlso(), [a, b], false);
-const neg = [[g.vocabL2E(W.agricola), ['farmer', '-ae f']], [g.vocabL2E(W.malus), ['mad', '-a -um']], [g.vocabL2E(W.legit), ['read', 'legunt']], [g.vocabL2E(W.femina), ['women', '-ae f']], [g.vocabL2E(W.cibus), ['food', '-a -um']], [g.vocabL2E(W.latus), ['happy', '-a -um']], [g.vocabE2L(W.magister), ['magistra', '-ī m']]];
+// (English→Latin cards were retired Oct 2026: Burke only reads Latin and answers in English.)
+const neg = [[g.vocabL2E(W.agricola), ['farmer', '-ae f']], [g.vocabL2E(W.malus), ['mad', '-a -um']], [g.vocabL2E(W.legit), ['read', 'singular']], [g.vocabL2E(W.legit), ['reads', 'plural']], [g.vocabL2E(W.femina), ['girl', '-ae f']], [g.vocabL2E(W.cibus), ['food', '-a -um']], [g.vocabL2E(W.latus), ['happy', '-a -um']]];
 neg.forEach(([c, v]) => ok(c, v, false, 'NEG ' + c.summary));
 
 /* ---------- noun ID ---------- */
@@ -153,6 +150,68 @@ s4.mocks.push({ stage: 2, day: qd - 1, at: Date.now(), score: 28 });
 assert(readiness(s4, quiz, qd - 1).color === 'green', 'green when all done: ' + JSON.stringify(readiness(s4, quiz, qd - 1).reasons));
 s4.mocks[0].score = 25; assert(readiness(s4, quiz, qd - 1).color === 'yellow', 'yellow at 25');
 assert(readiness(s4, { ...quiz, daysLeft: 5 }, qd - 5) === null, 'hidden before 4 days');
+
+/* ---------- tap buttons: the right answer is always there and accepted; every other button is wrong ---------- */
+const allCards = [];
+for (const ch of g.CHARTS) allCards.push(g.gChart(ch.id));
+for (const nw of g.PL_NOUNS) for (const num of ['sg', 'pl']) {
+  allCards.push(g.gNID(nw.id, num));
+  for (const a of g.ADJS) { allCards.push(g.gAgree(nw.id, num, a.id)); if (a.id !== 'alter') for (const k of ['g', 'n']) allCards.push(g.gFixPhrase(nw.id, num, a.id, k)); }
+  for (const a of g.PHRASE_ADJS) { allCards.push(g.gComp([nw.id], num, a.id)); for (const o of [0, 1, 2]) for (const ask of ['subject', 'complement']) { const c = g.gRole(nw.id, num, a.id, o, ask); if (new Set(c.fields[0].choices.map(letters)).size === 3) allCards.push(c); } }
+  for (const v of verbs) allCards.push(g.gSV([nw.id], num, v.id));
+}
+for (const x of g.PERSONS) for (const y of g.PERSONS) if (x !== y) { for (const a of g.PHRASE_ADJS) allCards.push(g.gComp([x.id, y.id], 'pl', a.id)); for (const v of verbs) allCards.push(g.gSV([x.id, y.id], 'pl', v.id)); }
+for (const sp of specs) { const errs = sp.k === 'adj' ? ['verb', 'adj-g', 'adj-n'] : sp.k === 'noun' && sp.s.length === 2 ? ['noun-g', 'verb'] : sp.k === 'noun' ? ['verb'] : []; for (const e of errs) allCards.push(g.gFixSent(sp, e)); }
+let choiceCards = 0;
+for (const c of allCards) {
+  const cf = c.fields.map((f, i) => [f, i]).filter(([f]) => f.choices);
+  assert(cf.length === c.fields.length, 'still a typed Latin field: ' + c.summary);
+  for (const [f] of cf) assert(f.choices.length >= 2, 'fewer than 2 buttons: ' + c.summary);
+  // find the combination of buttons that is right: exactly one per field
+  const combos = cf.reduce((acc, [f]) => acc.flatMap(a => f.choices.map(x => a.concat([x]))), [[]]);
+  const right = combos.filter(v => c.check(v).ok.every(Boolean));
+  n++; if (right.length !== 1) fails.push(`${right.length} right answers among buttons: ${c.summary} ${JSON.stringify(c.fields.map(f => f.choices))}`);
+  // same card rebuilt = same button order (cards are rebuilt from saved progress)
+  const again = cardFromSpec(JSON.parse(JSON.stringify({ t: 'g', type: c.type, params: c.params, skill: c.skill })));
+  assert(JSON.stringify(again.fields) === JSON.stringify(c.fields), 'button order changed on rebuild: ' + c.summary);
+  choiceCards++;
+}
+/* tap-the-meaning cards */
+for (const w of WORDS) for (let i = 0; i < 3; i++) {
+  const opts = g.pickOpts(w), c = g.vocabPick(w, opts), ch = c.fields[0].choices;
+  assert(ch.length === 4 && new Set(ch).size === 4, 'pick needs 4 different meanings: ' + w.lemma + ' ' + ch);
+  const right = ch.filter(x => c.check([x]).ok[0]); n++; if (right.length !== 1 || right[0] !== w.show) fails.push('pick wrong key ' + w.lemma + ' ' + ch);
+  for (const id of opts) assert(!W[id].mean.some(m => w.mean.includes(m)), `pick distractor means the same: ${w.lemma} / ${W[id].lemma}`);
+}
+/* ---------- generous English spelling ---------- */
+const L2 = id => g.vocabL2E(W[id]), sec = w => w.kind === 'x' ? [] : [mids(w)[0]];
+const spellOK = [['equus', 'morse'], ['equus', 'hors'], ['femina', 'women'], ['femina', 'womn'], ['laetus', 'hapy'], ['defessus', 'tierd'], ['puella', 'gril'], ['puer', 'boi'], ['latus', 'wid'], ['cibus', 'fod'], ['aut', 'ore'], ['villa', 'sumer house'], ['discipulus', 'studint'], ['magistra', 'teecher'], ['agricola', 'farmar'], ['statim', 'imediately'], ['parvus', 'smal'], ['legit', 'reeds'], ['scribit', 'rites'], ['magnus', 'grate'], ['longus', 'lung'], ['via', 'rode'], ['iratus', 'angery'], ['vicinus', 'nieboring'], ['familia', 'famly'], ['hortus', 'gardin'], ['nauta', 'saler'], ['poeta', 'poit'], ['subito', 'sudenly'], ['quod', 'becuz'], ['molestus', 'anoying'], ['vir', 'mun'], ['sedet', 'sitz']];
+for (const [id, a] of spellOK) ok(L2(id), [a, ...sec(W[id])], true, 'spelling ' + id);
+const spellBad = [['malus', 'man'], ['puella', 'girls'], ['puer', 'boys'], ['legit', 'read'], ['latus', 'happy'], ['laetus', 'wide'], ['vir', 'woman'], ['femina', 'man'], ['sunt', 'is'], ['est', 'are'], ['non', 'now'], ['iam', 'not'], ['et', 'or'], ['aut', 'and']];
+for (const [id, a] of spellBad) ok(L2(id), [a, ...sec(W[id])], false, 'spelling-neg ' + id);
+// No word's meaning is ever accepted for a different word (unless they really share it).
+for (const w of WORDS) for (const o of WORDS) if (o !== w) for (const m of o.mean) {
+  if (w.mean.some(x => normEn(x) === normEn(m))) continue;
+  const r = g.vocabL2E(w).check([m, ...sec(w)]); n++; if (r.ok[0]) fails.push(`ACCEPTED ${o.lemma}'s meaning "${m}" for ${w.lemma}`);
+}
+// Misspelled sentences still pass; the wrong number still fails.
+let fuzzS = 0;
+for (const sp of specs) {
+  const st = g.sentence(sp), c = g.gTrans(sp);
+  const mis = st.correct.replace(/\b(girl|teacher|student|happy|tired|farmer|friend|sailor|reads|writes|angry|garden)\b/i, m => m.length > 4 ? m.slice(0, 2) + m[3] + m[2] + m.slice(4) : m + m.slice(-1));
+  if (mis !== st.correct) { ok(c, [mis], true, 'trans misspelled ' + st.latin + ' <- ' + mis); fuzzS++; }
+  if (sp.s.length === 1 && W[sp.s[0]].pl) { const fl = g.sentence({ ...sp, num: sp.num === 'sg' ? 'pl' : 'sg' }); if (!fl.accepted.some(x => st.accepted.includes(x))) ok(c, [fl.correct], false, 'trans flipped ' + st.latin); }
+}
+for (const nw of g.PL_NOUNS.filter(w => w.id !== 'cibus')) for (const num of ['sg', 'pl']) for (const a of g.PHRASE_ADJS) {
+  const c = g.gPhrase(nw.id, num, a.id); const other = num === 'sg' ? nw.enPl : nw.mean;
+  if (!(num === 'sg' && nw.id === 'villa')) for (const x of other) ok(c, [`${a.mean[0]} ${x}`], false, 'phrase number(all) ' + c.summary);
+}
+/* ---------- sessions never ask English → Latin ---------- */
+for (let i = 0; i < 40; i++) for (const b of [buildDaily(st, {}, today, null), buildMastery(st, today, 2), buildMock(st, {}, 2), buildLearn(2), buildTestRun(st, {}, 2)])
+  for (const sp of b.specs) { assert(sp.t !== 'e2l' && sp.t !== 'also', 'English→Latin card in ' + b.mode); const c = cardFromSpec(sp); assert(c.type !== 'e2l' && c.type !== 'also', 'e2l card built'); }
+import { followUp } from '../js/session.js';
+for (const w of WORDS) { const f = followUp({ t: 'l2e', id: w.id }, st, {}); assert(f.t === 'pick', 'follow-up should be tap-the-meaning'); const f2 = followUp({ t: 'e2l', id: w.id }, st, {}); assert(f2.t === 'pick', 'old e2l follow-up'); }
+assert(cardFromSpec({ t: 'e2l', id: 'puella' }).type === 'l2e', 'old saved English→Latin cards become Latin→English');
 
 console.log(`checks: ${n}  failures: ${fails.length}  (phrases ${phraseCount}, sentences ${sentCount})`);
 if (fails.length) { console.log(fails.slice(0, 80).join('\n')); process.exit(1); }

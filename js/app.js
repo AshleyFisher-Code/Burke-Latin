@@ -202,7 +202,8 @@ function renderRun() {
   const test = run.sess.test;
   const ahead = run.deck.slice(run.idx + 1).filter(d => d.follow).length;
   const chipText = sp.follow ? 'Coming back · asked a new way' : test ? (run.sess.mode === 'mock' ? run.sess.sections[sp.sec].name : run.sess.title) : run.sess.title;
-  const inputs = c.fields.map((f, i) => h('input', { type: 'text', id: 'f' + i, autocomplete: 'off', autocorrect: 'off', autocapitalize: 'off', spellcheck: 'false', enterkeyhint: i < c.fields.length - 1 ? 'next' : 'go', placeholder: f.ph || '' }));
+  const autoGo = () => { if (!test && c.fields.every(f => f.choices) && inputs.every(x => x.readOnly || x.value)) goFn(); };
+  const inputs = c.fields.map((f, i) => f.choices ? choiceGroup(f, i, autoGo) : h('input', { type: 'text', id: 'f' + i, autocomplete: 'off', autocorrect: 'off', autocapitalize: 'off', spellcheck: 'false', enterkeyhint: i < c.fields.length - 1 ? 'next' : 'go', placeholder: f.ph || '' }));
   c.inputs = inputs;
   const p = c.prompt;
   const promptEl = p.latin ? h('div', {}, h('p', { class: 'latin' + (p.latin.length > 22 ? ' sm' : '') , text: p.latin }), p.sub ? h('div', { class: 'sub', text: p.sub }) : null)
@@ -215,7 +216,7 @@ function renderRun() {
     h('section', { class: 'card' },
       h('div', { class: 'row' }, h('span', { class: 'chip' + (sp.follow ? ' back' : ''), text: chipText }), c.stage ? h('span', { class: 'eyebrow', text: `Stage ${c.stage}` }) : null),
       c.instr ? h('p', { class: 'instr', text: c.instr }) : null, promptEl,
-      h('div', { class: 'fields' + (c.fields.length === 3 ? ' three' : c.fields.length === 2 ? ' two' : '') }, c.fields.map((f, i) => h('label', { class: 'f' }, f.label, inputs[i]))),
+      h('div', { class: 'fields' + (c.fields.length === 3 ? ' three' : c.fields.length === 2 ? ' two' : '') }, c.fields.map((f, i) => h(f.choices ? 'div' : 'label', { class: 'f' }, f.label, inputs[i]))),
       fb, h('div', { class: 'actions' }, btn)));
   const goFn = () => {
     if (Date.now() - lastSubmit < 250) return;
@@ -228,7 +229,19 @@ function renderRun() {
     const nextEmpty = inputs.findIndex((x, j) => j > i && !x.readOnly && !x.value.trim());
     if (nextEmpty >= 0 && c.mode !== 'done') inputs[nextEmpty].focus(); else goFn();
   }));
-  setTimeout(() => inputs[0].focus(), 30);
+  setTimeout(() => (inputs.find(x => x.tagName === 'INPUT') || inputs[0]).focus(), 30);
+}
+// Tap buttons instead of typing. Acts like an <input> (value, readOnly, focus) so checking works the same.
+function choiceGroup(f, i, onPick) {
+  let sel = '', ro = false;
+  const long = f.choices.some(x => x.length > 14);
+  const box = h('div', { class: 'choices' + (long ? ' long' : ''), id: 'f' + i, role: 'group' });
+  const btns = f.choices.map(x => h('button', { type: 'button', class: 'opt', text: x, onclick: () => { if (ro) return; box.value = x; box.classList.remove('bad'); onPick(); } }));
+  box.append(...btns);
+  Object.defineProperty(box, 'value', { get: () => sel, set: v => { sel = v; btns.forEach(b => b.classList.toggle('sel', b.textContent === sel)); } });
+  Object.defineProperty(box, 'readOnly', { get: () => ro, set: v => { ro = !!v; btns.forEach(b => (b.disabled = ro)); } });
+  box.focus = () => {}; box.select = () => {};
+  return box;
 }
 function confirmQuit() {
   show(h('section', { class: 'card' }, h('h2', { text: 'Stop for now?' }), h('p', { class: 'muted', text: run.sess.counts ? 'Answers so far are saved. Today only counts for your streak when you finish, so you can resume from the home screen.' : 'Answers so far are saved. You can resume from the home screen.' }),
@@ -257,6 +270,7 @@ function submitPractice(c, fb, btn) {
     const wrong = r.ok.map((x, i) => (x ? -1 : i)).filter(i => i >= 0);
     c.mode = 'retype'; c.wrong = wrong;
     wrong.forEach(i => { const el = c.inputs[i]; el.readOnly = false; el.value = ''; el.classList.remove('bad'); el.placeholder = 'type the correct answer'; });
+    if (wrong.every(i => c.fields[i].choices)) fb.querySelector('.retype-msg')?.replaceChildren('Tap the right answer to keep going.');
     btn.textContent = 'Check'; c.inputs[wrong[0]].focus();
   } else { c.mode = 'done'; btn.textContent = 'Next'; setTimeout(() => btn.focus(), 0); }
   saveRun();
@@ -269,7 +283,7 @@ function retype(c, fb, btn) {
 }
 function feedback(fb, ok, r, c) {
   const kids = [h('h3', { text: ok ? 'Correct' : 'Not quite' })];
-  if (!ok) { kids.push(h('p', { class: 'ans' }, 'Answer: ', h('b', { text: c.correct }))); r.hints.forEach(x => kids.push(h('p', { text: x }))); if (c.hook) kids.push(h('p', { class: 'hook', text: 'Memory hook: ' + c.hook })); if (!ok) kids.push(h('p', { class: 'small muted', text: 'Type the right answer to keep going.' })); }
+  if (!ok) { kids.push(h('p', { class: 'ans' }, 'Answer: ', h('b', { text: c.correct }))); r.hints.forEach(x => kids.push(h('p', { text: x }))); if (c.hook) kids.push(h('p', { class: 'hook', text: 'Memory hook: ' + c.hook })); if (!ok) kids.push(h('p', { class: 'small muted retype-msg', text: 'Type the right answer to keep going.' })); }
   r.notes.forEach(x => kids.push(h('p', { class: 'small muted', text: x })));
   fb.hidden = false; fb.className = 'fb ' + (ok ? 'ok' : 'bad'); fb.replaceChildren(...kids);
 }
