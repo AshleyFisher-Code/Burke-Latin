@@ -25,6 +25,7 @@ export function vocabL2E(w) {
     fields: [{ label: 'Meaning', ph: 'English' }].concat(second ? [w.kind === 'v' ? { label: 'Number', choices: ['singular', 'plural'] } : { label: 'Middle stuff', ph: 'middle stuff' }] : []),
     check: v => pack(second ? [gradeMeaning(v[0], w), w.kind === 'v' ? gradeVerbNum(v[1], w) : gradeMiddle(v[1], w)] : [gradeMeaning(v[0], w)]),
     correct: vocabAnswer(w), summary: w.lemma,
+    answers: [w.show, w.kind === 'v' ? (w.num === 'sg' ? 'singular' : 'plural') : w.kind === 'a' ? '-a -um' : `-${w.gen === 'i' ? 'ī' : 'ae'} ${w.g}`],
   };
 }
 export function vocabE2L(w) {
@@ -66,7 +67,9 @@ export function pickOpts(w) {
   const mine = new Set(w.mean.map(normEn));
   const pool = WORDS.filter(x => x.id !== w.id && x.show !== w.show && !x.mean.some(m => mine.has(normEn(m))));
   const same = shuffle(pool.filter(x => x.kind === w.kind)), other = shuffle(pool.filter(x => x.kind !== w.kind));
-  return same.concat(other).slice(0, 3).map(x => x.id);
+  const seen = new Set([w.show]), out = [];
+  for (const x of same.concat(other)) { if (seen.has(x.show)) continue; seen.add(x.show); out.push(x.id); if (out.length === 3) break; }
+  return out;
 }
 export function vocabAnswer(w) {
   if (w.kind === 'v') return `${w.lemma}: ${w.show}  (${w.num === 'sg' ? 'singular' : 'plural'})`;

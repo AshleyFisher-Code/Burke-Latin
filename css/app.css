@@ -97,6 +97,9 @@ input::placeholder{color:var(--muted);opacity:.55}
 input:focus,select:focus{outline:none;border-color:var(--accent)}
 input.ok{border-color:var(--ok);background:var(--ok-bg)}
 input.bad{border-color:var(--bad)}
+input.shown{border-color:var(--warn);background:var(--warn-bg)}
+.choices.shown button.opt.sel{border-color:var(--warn);background:var(--warn-bg)}
+.fb.shown{background:var(--warn-bg)} .fb.shown h3{color:var(--warn)}
 input[readonly]{opacity:.85}
 .choices{display:flex;flex-wrap:wrap;gap:8px}
 .choices.long{flex-direction:column}

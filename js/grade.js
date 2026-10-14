@@ -86,7 +86,13 @@ export function gradeMiddle(v, w) {
   const lw = letters(w.lemma);
   const cands = [raw]; if (raw.length > lw.length && raw.startsWith(lw)) cands.push(raw.slice(lw.length));
   if (w.kind === 'a') {
-    if (w.rest) { if (cands.includes(letters(w.rest))) return OK; return { ok: false, hint: `${w.lemma} is written out in full: ${w.entry}.` }; }
+    if (w.rest) {
+      // alter, altera, alterum: accept the full forms, the short pattern (-a -um, since alter + a = altera), or -era -erum.
+      const full = letters(w.rest), ok = [full, 'aum', 'eraerum', 'usaum'];
+      if (cands.some(n => ok.includes(n))) return OK;
+      if (cands.some(n => n.length >= 6 && lev(phon(n), phon(full)) <= 3)) return { ok: true, note: `Spelled: ${w.rest}` };
+      return { ok: false, hint: `alter follows the -a -um pattern: alter, altera, alterum. Type -a -um.` };
+    }
     if (cands.some(n => n === 'aum' || n === 'usaum')) return OK;
     const n = cands[cands.length - 1];
     if (/^(i|ae)?[mf]?$/.test(n) || /^[mf](i|ae)$/.test(n)) return { ok: false, hint: `${w.lemma} is an adjective. Adjectives don't have just one gender, so the middle stuff is -a -um, not -ī m.` };

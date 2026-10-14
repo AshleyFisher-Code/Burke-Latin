@@ -268,7 +268,7 @@ function submitPractice(c, fb, btn) {
     const nF = run.follows[c.cid] || 0;
     if (nF < 2) { run.follows[c.cid] = nF + 1; const f = followUp(sp, S, settings); const pos = run.idx + 1 + 5 + Math.floor(Math.random() * 4); if (pos >= run.deck.length) run.deck.push(f); else run.deck.splice(pos, 0, f); }
     const wrong = r.ok.map((x, i) => (x ? -1 : i)).filter(i => i >= 0);
-    c.mode = 'retype'; c.wrong = wrong;
+    c.mode = 'retype'; c.wrong = wrong; c.tries = 1;
     wrong.forEach(i => { const el = c.inputs[i]; el.readOnly = false; el.value = ''; el.classList.remove('bad'); el.placeholder = 'type the correct answer'; });
     if (wrong.every(i => c.fields[i].choices)) fb.querySelector('.retype-msg')?.replaceChildren('Tap the right answer to keep going.');
     btn.textContent = 'Check'; c.inputs[wrong[0]].focus();
@@ -276,14 +276,34 @@ function submitPractice(c, fb, btn) {
   saveRun();
 }
 function retype(c, fb, btn) {
+  if (c.wrong.some(i => !c.inputs[i].value.trim())) { c.inputs[c.wrong.find(i => !c.inputs[i].value.trim())].focus(); return; }
   lastSubmit = Date.now(); const r = c.check(vals(c)); let all = true;
   c.wrong.forEach(i => { const ok = !!r.ok[i]; c.inputs[i].classList.toggle('ok', ok); c.inputs[i].classList.toggle('bad', !ok); if (!ok) all = false; });
+  c.tries = (c.tries || 1) + 1;
+  if (!all && c.tries >= 3) return reveal(c, fb, btn, r);
   if (all) { c.mode = 'done'; c.inputs.forEach(i => (i.readOnly = true)); btn.textContent = 'Next'; setTimeout(() => btn.focus(), 0); }
   else { const f = c.wrong.find(i => !r.ok[i]); c.inputs[f].focus(); c.inputs[f].select(); }
 }
+// Three misses on the same card: stop, show the answer, move on. (It's already queued to come back later.)
+function reveal(c, fb, btn, r) {
+  c.wrong.filter(i => !r.ok[i]).forEach(i => {
+    const el = c.inputs[i], f = c.fields[i];
+    let ans = c.answers && c.answers[i];
+    if (!ans && f.choices) ans = f.choices.find(x => { const v = vals(c); v[i] = x; return c.check(v).ok[i]; });
+    if (ans != null) el.value = ans;
+    el.classList.remove('bad'); el.classList.add('shown');
+  });
+  c.mode = 'done'; c.inputs.forEach(i => (i.readOnly = true));
+  fb.className = 'fb shown';
+  fb.replaceChildren(h('h3', { text: "Here's the answer" }), h('p', { class: 'ans' }, h('b', { text: c.correct })),
+    c.hook ? h('p', { class: 'hook', text: 'Memory hook: ' + c.hook }) : null,
+    h('p', { class: 'small muted', text: "No worries. This one will come back later so you can get it." }));
+  btn.textContent = 'Next'; setTimeout(() => btn.focus(), 0); saveRun();
+}
 function feedback(fb, ok, r, c) {
   const kids = [h('h3', { text: ok ? 'Correct' : 'Not quite' })];
-  if (!ok) { kids.push(h('p', { class: 'ans' }, 'Answer: ', h('b', { text: c.correct }))); r.hints.forEach(x => kids.push(h('p', { text: x }))); if (c.hook) kids.push(h('p', { class: 'hook', text: 'Memory hook: ' + c.hook })); if (!ok) kids.push(h('p', { class: 'small muted retype-msg', text: 'Type the right answer to keep going.' })); }
+  if (!ok) { kids.push(h('p', { class: 'ans' }, 'Answer: ', h('b', { text: c.correct })));
+    if (c.answers) r.ok.forEach((x, i) => { if (!x && c.fields[i] && !c.fields[i].choices) kids.push(h('p', {}, `${c.fields[i].label}: `, h('b', { text: c.answers[i] }))); }); r.hints.forEach(x => kids.push(h('p', { text: x }))); if (c.hook) kids.push(h('p', { class: 'hook', text: 'Memory hook: ' + c.hook })); if (!ok) kids.push(h('p', { class: 'small muted retype-msg', text: 'Type the right answer to keep going.' })); }
   r.notes.forEach(x => kids.push(h('p', { class: 'small muted', text: x })));
   fb.hidden = false; fb.className = 'fb ' + (ok ? 'ok' : 'bad'); fb.replaceChildren(...kids);
 }

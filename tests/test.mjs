@@ -177,7 +177,7 @@ for (const c of allCards) {
   choiceCards++;
 }
 /* tap-the-meaning cards */
-for (const w of WORDS) for (let i = 0; i < 3; i++) {
+for (const w of WORDS) for (let i = 0; i < 200; i++) {
   const opts = g.pickOpts(w), c = g.vocabPick(w, opts), ch = c.fields[0].choices;
   assert(ch.length === 4 && new Set(ch).size === 4, 'pick needs 4 different meanings: ' + w.lemma + ' ' + ch);
   const right = ch.filter(x => c.check([x]).ok[0]); n++; if (right.length !== 1 || right[0] !== w.show) fails.push('pick wrong key ' + w.lemma + ' ' + ch);
@@ -212,6 +212,11 @@ for (let i = 0; i < 40; i++) for (const b of [buildDaily(st, {}, today, null), b
 import { followUp } from '../js/session.js';
 for (const w of WORDS) { const f = followUp({ t: 'l2e', id: w.id }, st, {}); assert(f.t === 'pick', 'follow-up should be tap-the-meaning'); const f2 = followUp({ t: 'e2l', id: w.id }, st, {}); assert(f2.t === 'pick', 'old e2l follow-up'); }
 assert(cardFromSpec({ t: 'e2l', id: 'puella' }).type === 'l2e', 'old saved English→Latin cards become Latin→English');
+
+/* ---------- alter middle stuff + revealed answers are always accepted ---------- */
+for (const a of ['-a -um', 'a um', '-a, -um', 'altera alterum', 'altera, alterum', 'alter, altera, alterum', '-era -erum', 'altra altrum', 'alterra alterrum']) ok(g.vocabL2E(W.alter), ['another', a], true, 'alter middle ' + a);
+for (const a of ['-ī m', '-ae f', 'i m']) ok(g.vocabL2E(W.alter), ['another', a], false, 'alter middle neg ' + a);
+for (const w of WORDS) { const c = g.vocabL2E(w); ok(c, c.answers.slice(0, c.fields.length), true, 'revealed answer ' + w.lemma); }
 
 console.log(`checks: ${n}  failures: ${fails.length}  (phrases ${phraseCount}, sentences ${sentCount})`);
 if (fails.length) { console.log(fails.slice(0, 80).join('\n')); process.exit(1); }
