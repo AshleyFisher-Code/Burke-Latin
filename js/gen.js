@@ -23,7 +23,14 @@ export function vocabL2E(w) {
     instr: w.kind === 'x' ? 'What does it mean?' : w.kind === 'v' ? 'Meaning, then tap singular or plural.' : 'Meaning, then the middle stuff.',
     prompt: { latin: w.lemma },
     fields: [{ label: 'Meaning', ph: 'English' }].concat(second ? [w.kind === 'v' ? { label: 'Number', choices: ['singular', 'plural'] } : { label: 'Middle stuff', ph: 'middle stuff' }] : []),
-    check: v => pack(second ? [gradeMeaning(v[0], w), w.kind === 'v' ? gradeVerbNum(v[1], w) : gradeMiddle(v[1], w)] : [gradeMeaning(v[0], w)]),
+    check: v => {
+      if (!second) return pack([gradeMeaning(v[0], w)]);
+      if (w.kind !== 'v') return pack([gradeMeaning(v[0], w), gradeMiddle(v[1], w)]);
+      let r0 = gradeMeaning(v[0], w); const r1 = gradeVerbNum(v[1], w);
+      // The button already tests singular/plural, so "live" for habitat counts when he tapped singular.
+      if (!r0.ok && r1.ok && verbOtherNum(v[0], w)) r0 = { ok: true, note: `Full meaning: ${w.num === 'sg' ? 'he/she' : 'they'} ${w.show}` };
+      return pack([r0, r1]);
+    },
     correct: vocabAnswer(w), summary: w.lemma,
     answers: [w.show, w.kind === 'v' ? (w.num === 'sg' ? 'singular' : 'plural') : w.kind === 'a' ? '-a -um' : `-${w.gen === 'i' ? 'ī' : 'ae'} ${w.g}`],
   };
@@ -46,6 +53,11 @@ export function vocabAlso() {
     fields: [{ label: 'Latin word 1', ph: 'Latin' }, { label: 'Latin word 2', ph: 'Latin' }],
     check: v => gradeAlso(v[0], v[1]), correct: 'etiam and quoque', summary: 'also → both Latin words',
   };
+}
+function verbOtherNum(v, w) {
+  if (w.id === 'est' || w.id === 'sunt') return false; // is/are are different words, not a dropped -s
+  const n = normEn(v).replace(/^(he\/she\/it|he\/she|he or she|s\/he|he|she|it|they)\s+/, ''); if (!n) return false;
+  const other = w.wrongNum.map(normEn); return other.includes(n) || !!fuzzyEn(n, other, w.mean.map(normEn));
 }
 function gradeVerbNum(v, w) {
   const r = gradeNumber(v, w.num); if (r.ok || !v) return r;
@@ -220,8 +232,12 @@ export function gVnum(vid, num) {
     check: v => {
       const r0 = { ...gradeNumber(v[0], num) }; const e = normEn(v[1]);
       const otherAll = otherEn.flatMap(x => [x, ...(num === 'sg' ? ['they ' + x] : ['he ' + x, 'she ' + x, 'it ' + x])]);
-      const fz = !accepted.has(e) && fuzzyEn(e, [...accepted], otherAll); const ok1 = accepted.has(e) || !!fz;
+      const fz = !accepted.has(e) && fuzzyEn(e, [...accepted], otherAll);
+      // Number is tested by the button; if he got that right, the other-number English still shows he knows the verb.
+      const bare = vw.id !== 'est' && vw.id !== 'sunt' && !accepted.has(e) && !fz && r0.ok && e && (otherAll.includes(e) || !!fuzzyEn(e, otherAll, [...accepted]));
+      const ok1 = accepted.has(e) || !!fz || bare;
       if (fz) r0.note = (r0.note ? r0.note + ' ' : '') + `Spelled: ${fz}`;
+      if (bare) r0.note = (r0.note ? r0.note + ' ' : '') + `Full meaning: ${num === 'sg' ? 'he/she ' : 'they '}${en[0]}`;
       const hints = [];
       if (!r0.ok) hints.push(num === 'sg' ? `${form} ends in -t, so it's singular.` : `${form} ends in -nt, so it's plural.`);
       if (!ok1 && e && otherEn.includes(e.replace(/^(he|she|it|they) /, ''))) hints.push(`That's the ${num === 'sg' ? 'plural' : 'singular'} English. ${form} is ${num === 'sg' ? 'singular' : 'plural'}: ${en[0]}.`);

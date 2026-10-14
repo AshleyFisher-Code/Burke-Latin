@@ -24,7 +24,7 @@ for (const w of WORDS) {
   ok(c1, w.kind === 'x' ? [w.correct || ''] : ['zzz', mids(w)[0]], false, 'neg ' + w.lemma);
 }
 // (English→Latin cards were retired Oct 2026: Burke only reads Latin and answers in English.)
-const neg = [[g.vocabL2E(W.agricola), ['farmer', '-ae f']], [g.vocabL2E(W.malus), ['mad', '-a -um']], [g.vocabL2E(W.legit), ['read', 'singular']], [g.vocabL2E(W.legit), ['reads', 'plural']], [g.vocabL2E(W.femina), ['girl', '-ae f']], [g.vocabL2E(W.cibus), ['food', '-a -um']], [g.vocabL2E(W.latus), ['happy', '-a -um']]];
+const neg = [[g.vocabL2E(W.agricola), ['farmer', '-ae f']], [g.vocabL2E(W.malus), ['mad', '-a -um']], [g.vocabL2E(W.legit), ['reads', 'plural']], [g.vocabL2E(W.femina), ['girl', '-ae f']], [g.vocabL2E(W.cibus), ['food', '-a -um']], [g.vocabL2E(W.latus), ['happy', '-a -um']]];
 neg.forEach(([c, v]) => ok(c, v, false, 'NEG ' + c.summary));
 
 /* ---------- noun ID ---------- */
@@ -68,7 +68,7 @@ for (const v of WORDS.filter(w => w.kind === 'v' && w.num === 'sg')) for (const 
   const c = g.gVnum(v.id, num); const en = g.verbEnglish(v, num);
   for (const e of en) { ok(c, [num === 'sg' ? 'singular' : 'plural', e], true); ok(c, [num === 'sg' ? 'sg' : 'pl', (num === 'sg' ? 'he ' : 'they ') + e], true); }
   ok(c, [num === 'sg' ? 'plural' : 'singular', en[0]], false);
-  const other = g.verbEnglish(v, num === 'sg' ? 'pl' : 'sg')[0]; if (other !== en[0]) ok(c, [num === 'sg' ? 'singular' : 'plural', other], false, 'vnum wrong-number english ' + c.summary);
+  const other = g.verbEnglish(v, num === 'sg' ? 'pl' : 'sg')[0]; if (other !== en[0]) { const strict = v.id === 'est'; ok(c, [num === 'sg' ? 'singular' : 'plural', other], !strict, 'vnum bare verb with right button ' + c.summary); ok(c, [num === 'sg' ? 'plural' : 'singular', other], false, 'vnum wrong button ' + c.summary); }
 }
 /* ---------- subject-verb ---------- */
 const verbs = WORDS.filter(w => w.kind === 'v' && w.num === 'sg');
@@ -187,7 +187,7 @@ for (const w of WORDS) for (let i = 0; i < 200; i++) {
 const L2 = id => g.vocabL2E(W[id]), sec = w => w.kind === 'x' ? [] : [mids(w)[0]];
 const spellOK = [['equus', 'morse'], ['equus', 'hors'], ['femina', 'women'], ['femina', 'womn'], ['laetus', 'hapy'], ['defessus', 'tierd'], ['puella', 'gril'], ['puer', 'boi'], ['latus', 'wid'], ['cibus', 'fod'], ['aut', 'ore'], ['villa', 'sumer house'], ['discipulus', 'studint'], ['magistra', 'teecher'], ['agricola', 'farmar'], ['statim', 'imediately'], ['parvus', 'smal'], ['legit', 'reeds'], ['scribit', 'rites'], ['magnus', 'grate'], ['longus', 'lung'], ['via', 'rode'], ['iratus', 'angery'], ['vicinus', 'nieboring'], ['familia', 'famly'], ['hortus', 'gardin'], ['nauta', 'saler'], ['poeta', 'poit'], ['subito', 'sudenly'], ['quod', 'becuz'], ['molestus', 'anoying'], ['vir', 'mun'], ['sedet', 'sitz']];
 for (const [id, a] of spellOK) ok(L2(id), [a, ...sec(W[id])], true, 'spelling ' + id);
-const spellBad = [['malus', 'man'], ['puella', 'girls'], ['puer', 'boys'], ['legit', 'read'], ['latus', 'happy'], ['laetus', 'wide'], ['vir', 'woman'], ['femina', 'man'], ['sunt', 'is'], ['est', 'are'], ['non', 'now'], ['iam', 'not'], ['et', 'or'], ['aut', 'and']];
+const spellBad = [['malus', 'man'], ['puella', 'girls'], ['puer', 'boys'], ['latus', 'happy'], ['laetus', 'wide'], ['vir', 'woman'], ['femina', 'man'], ['sunt', 'is'], ['est', 'are'], ['non', 'now'], ['iam', 'not'], ['et', 'or'], ['aut', 'and']];
 for (const [id, a] of spellBad) ok(L2(id), [a, ...sec(W[id])], false, 'spelling-neg ' + id);
 // No word's meaning is ever accepted for a different word (unless they really share it).
 for (const w of WORDS) for (const o of WORDS) if (o !== w) for (const m of o.mean) {
@@ -217,6 +217,17 @@ assert(cardFromSpec({ t: 'e2l', id: 'puella' }).type === 'l2e', 'old saved Engli
 for (const a of ['-a -um', 'a um', '-a, -um', 'altera alterum', 'altera, alterum', 'alter, altera, alterum', '-era -erum', 'altra altrum', 'alterra alterrum']) ok(g.vocabL2E(W.alter), ['another', a], true, 'alter middle ' + a);
 for (const a of ['-ī m', '-ae f', 'i m']) ok(g.vocabL2E(W.alter), ['another', a], false, 'alter middle neg ' + a);
 for (const w of WORDS) { const c = g.vocabL2E(w); ok(c, c.answers.slice(0, c.fields.length), true, 'revealed answer ' + w.lemma); }
+
+/* ---------- verbs: bare English counts when the singular/plural button is right ---------- */
+for (const v of WORDS.filter(w => w.kind === 'v' && w.id !== 'est' && w.id !== 'sunt')) {
+  const c = g.vocabL2E(v), right = v.num === 'sg' ? 'singular' : 'plural', wrong = v.num === 'sg' ? 'plural' : 'singular';
+  for (const b of v.wrongNum) { ok(c, [b, right], true, 'bare verb ' + v.lemma + ' ' + b); ok(c, ['they ' + b, right], true, 'bare verb pron ' + v.lemma); ok(c, [b, wrong], false, 'bare verb wrong button ' + v.lemma); }
+  ok(c, [v.show, wrong], false, 'right meaning wrong button ' + v.lemma);
+}
+ok(g.vocabL2E(W.habitat), ['liv', 'singular'], true, 'habitat liv'); ok(g.vocabL2E(W.scribit), ['rite', 'singular'], true, 'scribit rite');
+ok(g.vocabL2E(W.habitat), ['sits', 'singular'], false, 'habitat sits'); ok(g.vocabL2E(W.legit), ['write', 'singular'], false, 'legit write');
+// sentence translation stays strict on number
+ok(g.gTrans({ k: 'act', s: ['puella'], num: 'sg', v: 'habitat' }), ['the girl live'], false, 'sentence keeps -s strict');
 
 console.log(`checks: ${n}  failures: ${fails.length}  (phrases ${phraseCount}, sentences ${sentCount})`);
 if (fails.length) { console.log(fails.slice(0, 80).join('\n')); process.exit(1); }

@@ -1,6 +1,6 @@
 // Keeps the app opening with no signal (bus, ballfield). Own files: network first, fall back to cache.
-const CACHE = 'latin-1.1.1';
-const SHELL = ['./', 'index.html', 'css/app.css?v=1.1.1', 'js/app.js?v=1.1.1', 'js/firebase.js', 'js/config.js', 'js/data.js', 'js/grade.js', 'js/gen.js', 'js/srs.js', 'js/session.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/apple-touch-icon.png'];
+const CACHE = 'latin-1.2.0';
+const SHELL = ['./', 'index.html', 'css/app.css?v=1.2.0', 'js/app.js?v=1.2.0', 'js/firebase.js', 'js/config.js', 'js/data.js', 'js/grade.js', 'js/gen.js', 'js/srs.js', 'js/session.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/apple-touch-icon.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
 self.addEventListener('fetch', e => {
