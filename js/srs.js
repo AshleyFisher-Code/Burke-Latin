@@ -129,26 +129,32 @@ export function nextQuiz(settings, today) {
 // The vocab test covers only the current unit's words; grammar covers everything so far.
 export const quizWords = stage => WORDS.filter(w => w.stage === stage);
 export const quizSkills = stage => SKILLS.filter(s => s.stage <= stage);
+// covers: 'vocab' (this unit's words only), 'grammar' (all skills so far), or 'both' (older quiz entries).
+export const quizCovers = q => (q && q.covers) || 'both';
+export const COVERS_LABEL = { vocab: 'vocab', grammar: 'grammar', both: '' };
+export const mockPct = m => (m.of ? m.score / m.of : m.score / 30);
+export const mockKind = m => m.kind || 'both';
 export function readiness(st, quiz, today, nowMs = Date.now()) {
   if (!quiz || quiz.daysLeft > 4 || quiz.daysLeft < 0) return null;
+  const cov = quizCovers(quiz), useV = cov !== 'grammar', useG = cov !== 'vocab';
   const winStart = quiz.day - 4;
   const qw = quizWords(quiz.stage);
   const confirmed = qw.filter(w => { const ws = st.words[w.id]; return ws && ws.confirmed != null && ws.confirmed >= winStart && ws.lastOk; });
-  const vocabPct = confirmed.length / qw.length;
-  const skills = quizSkills(quiz.stage).map(s => ({ ...s, acc: skillAcc(st, s.id), n: (st.skills[s.id] || { hist: [] }).hist.length }));
+  const vocabPct = useV ? confirmed.length / qw.length : 1;
+  const skills = useG ? quizSkills(quiz.stage).map(s => ({ ...s, acc: skillAcc(st, s.id), n: (st.skills[s.id] || { hist: [] }).hist.length })) : [];
   const skillOk = sk => sk.n >= 5 && sk.acc >= 0.85, skillNear = sk => sk.n >= 3 && sk.acc >= 0.7;
-  const mocks = (st.mocks || []).filter(m => m.stage === quiz.stage && m.day >= winStart);
+  const mocks = (st.mocks || []).filter(m => m.stage === quiz.stage && m.day >= winStart && mockKind(m) === cov);
   const recent = mocks.filter(m => nowMs - m.at <= 48 * 3600000);
-  const bestRecent = recent.length ? Math.max(...recent.map(m => m.score)) : null;
-  const bestWin = mocks.length ? Math.max(...mocks.map(m => m.score)) : null;
-  const reasons = [];
+  const bestRecent = recent.length ? Math.max(...recent.map(mockPct)) : null;
+  const bestWin = mocks.length ? Math.max(...mocks.map(mockPct)) : null;
+  const reasons = [], mockName = cov === 'vocab' ? 'vocab mock quiz' : cov === 'grammar' ? 'grammar mock quiz' : 'mock quiz';
   if (vocabPct < 1) reasons.push(`${qw.length - confirmed.length} of ${qw.length} Unit ${quiz.stage} words not confirmed yet`);
   const weak = skills.filter(s => !skillOk(s));
   if (weak.length) reasons.push(`Grammar to bring up to 85%: ${weak.map(s => s.name).join(', ')}`);
-  if (bestRecent == null || bestRecent < 27) reasons.push(bestRecent == null ? (bestWin == null ? 'No mock quiz yet' : `Take a fresh mock quiz (last one was over 2 days ago)`) : `Mock quiz ${Math.round(bestRecent * 10) / 10}/30 (need 27)`);
+  if (bestRecent == null || bestRecent < 0.9) reasons.push(bestRecent == null ? (bestWin == null ? `No ${mockName} yet` : `Take a fresh ${mockName} (last one was over 2 days ago)`) : `${mockName[0].toUpperCase() + mockName.slice(1)} ${Math.round(bestRecent * 100)}% (need 90%)`);
   let color = 'red';
-  if (vocabPct === 1 && !weak.length && bestRecent != null && bestRecent >= 27) color = 'green';
-  else if (vocabPct >= 0.85 && skills.every(skillNear) && bestWin != null && bestWin >= 24) color = 'yellow';
-  return { color, reasons, vocabPct, confirmed: confirmed.length, total: qw.length, skills, bestRecent, bestWin, unconfirmed: qw.filter(w => !confirmed.includes(w)).map(w => w.id) };
+  if (vocabPct === 1 && !weak.length && bestRecent != null && bestRecent >= 0.9) color = 'green';
+  else if (vocabPct >= 0.85 && skills.every(skillNear) && bestWin != null && bestWin >= 0.8) color = 'yellow';
+  return { color, reasons, vocabPct, confirmed: useV ? confirmed.length : 0, total: useV ? qw.length : 0, skills, bestRecent, bestWin, covers: cov, unconfirmed: useV ? qw.filter(w => !confirmed.includes(w)).map(w => w.id) : [] };
 }
 export const isMasteryDay = st => ((st.practiceDays || 0) + 1) % 10 === 0;

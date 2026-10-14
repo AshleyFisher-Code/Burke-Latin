@@ -4,7 +4,7 @@ import { WORDS, W, STAGES, MAX_STAGE, STAGE_NAMES } from './data.js';
 import { SKILLS, SKILL } from './gen.js';
 import { cardFromSpec, buildDaily, buildReview, buildLearn, buildUnit, buildTrouble, troubleWords, buildSkill, buildTestRun, buildMock, buildMastery, followUp, stageOf } from './session.js';
 import { dayNum, isoFromDay, dayFromISO, blankState, updateWord, updateSkill, touchWords, completeDay, streakView, rankFor, nextMilestone, milestones,
-  nextQuiz, readiness, isMasteryDay, wordStatus, STATUS_LABEL, skillStatus, skillAcc } from './srs.js';
+  nextQuiz, readiness, isMasteryDay, quizCovers, mockPct, mockKind, wordStatus, STATUS_LABEL, skillStatus, skillAcc } from './srs.js';
 
 /* ---------- tiny DOM helper ---------- */
 const h = (tag, attrs = {}, ...kids) => {
@@ -108,12 +108,16 @@ function streakCard() {
     nx ? h('div', {}, h('div', { class: 'spread small' }, h('span', {}, `${nx.days - v.count} to `, h('b', { text: nx.latin }), reward ? ` → ${reward}` : ''), h('span', { class: 'muted' }, 'Rest days ', h('span', { class: 'rest' }, h('i', { class: v.rest >= 1 ? 'on' : '' }), h('i', { class: v.rest >= 2 ? 'on' : '' })))),
       h('div', { class: 'meter', style: 'margin-top:6px' }, h('i', { style: `width:${Math.max(4, Math.round(frac * 100))}%` }))) : null);
 }
+const qName = q => `Stage ${q.stage} ${({ vocab: 'vocab ', grammar: 'grammar ' })[quizCovers(q)] || ''}quiz`;
+const mockLine = m => `${fmt1(m.score)}/${m.of || 30}`;
+const mockPill = m => (mockPct(m) >= 0.9 ? 'good' : mockPct(m) >= 0.8 ? 'mid' : 'bad');
+const mockLabel = m => `${mockKind(m) === 'vocab' ? 'Vocab' : mockKind(m) === 'grammar' ? 'Grammar' : 'Full'} · Stage ${m.stage} · ${fmtDate(isoFromDay(m.day))}`;
 function lightCard(q, rd, compact) {
   const color = rd.color;
   return h('section', { class: 'card' },
     h('div', { class: 'light' },
       h('div', { class: 'lamp', role: 'img', 'aria-label': `Readiness: ${color}` }, h('i', { class: 'r' + (color === 'red' ? ' on' : '') }), h('i', { class: 'y' + (color === 'yellow' ? ' on' : '') }), h('i', { class: 'g' + (color === 'green' ? ' on' : '') })),
-      h('div', {}, h('div', { class: 'eyebrow', text: `Stage ${q.stage} quiz · ${fmtDate(q.date)} · ${q.daysLeft === 0 ? 'today' : q.daysLeft === 1 ? 'tomorrow' : q.daysLeft + ' days'}` }),
+      h('div', {}, h('div', { class: 'eyebrow', text: `${qName(q)} · ${fmtDate(q.date)} · ${q.daysLeft === 0 ? 'today' : q.daysLeft === 1 ? 'tomorrow' : q.daysLeft + ' days'}` }),
         h('h2', { text: color === 'green' ? 'Ready.' : color === 'yellow' ? 'Almost ready.' : 'Not ready yet.' }),
         rd.reasons.length ? h('ul', {}, rd.reasons.map(r => h('li', { text: r }))) : h('p', { class: 'small muted', text: 'Keep it green: one more mock the day before.' }))),
     compact ? h('button', { class: 'ghost', onclick: () => go('prep') }, 'Go to Test Prep') : null);
@@ -122,23 +126,24 @@ function renderHome() {
   const t = today(), q = nextQuiz(settings, t), rd = q ? readiness(S, q, t) : null, v = streakView(S, t, settings);
   const saved = loadRun();
   const name = settings.name || '';
-  const daily = q && q.daysLeft <= 4 ? 'Quiz prep' : isMasteryDay(S) ? 'Mastery Check' : "Today's practice";
+  const cov = q ? quizCovers(q) : 'both';
+  const daily = q && q.daysLeft <= 4 ? (cov === 'vocab' ? 'Vocab quiz prep' : cov === 'grammar' ? 'Grammar quiz prep' : 'Quiz prep') : isMasteryDay(S) ? 'Mastery Check' : "Today's practice";
   const dueN = WORDS.filter(w => w.stage <= stageOf(settings) && S.words[w.id] && S.words[w.id].seen && S.words[w.id].due <= t).length;
   const shaky = troubleWords(S, settings).length;
   const weak = SKILLS.filter(s => s.stage <= stageOf(settings) && skillStatus(S, s.id).level !== 'good').length;
   show(
     h('div', { class: 'top' }, h('h1', { text: `Salvē${name ? ', ' + name : ''}!` }), role === 'parent' ? h('button', { class: 'back', onclick: () => go('parent') }, 'Parent view') : null),
     preview ? h('p', { class: 'chip gold', text: 'Preview of Burke\'s home' }) : null,
-    rd ? lightCard(q, rd, true) : q ? h('p', { class: 'small muted', text: `Next: Stage ${q.stage} quiz ${fmtDate(q.date)} · ${q.daysLeft} days. Test-readiness light turns on 4 days before.` }) : null,
+    rd ? lightCard(q, rd, true) : q ? h('p', { class: 'small muted', text: `Next: ${qName(q)} ${fmtDate(q.date)} · ${q.daysLeft} days. Test-readiness light turns on 4 days before.` }) : null,
     saved && saved.uid === user.uid ? h('button', { class: 'btn hero', onclick: () => { run = saved; renderRun(); } }, h('b', { text: 'Resume ' + saved.sess.title }), h('span', { text: `Question ${saved.idx + 1} of ${saved.deck.length}` })) : null,
     v.done ? h('button', { class: 'btn done', onclick: () => start(buildDaily(S, settings, t, q)) }, h('b', { text: `${daily} done ✓` }), h('span', { text: 'Want more? Run another round (streak already counted).' }))
       : h('button', { class: 'btn hero', onclick: () => start(buildDaily(S, settings, t, q)) }, h('b', { text: `Start ${daily.toLowerCase().replace("today's", "today's")}` }),
-        h('span', { text: daily === 'Mastery Check' ? 'Every 10th day: a no-hints check of your whole word bank · about 10 min' : daily === 'Quiz prep' ? 'Unconfirmed quiz words + weak grammar · about 12 min' : 'About 25 cards · 10–12 min' })),
-    (() => { const st = stageOf(settings), n = WORDS.filter(w => w.stage === st).length; return h('button', { class: 'btn', onclick: () => start(buildUnit(st)) }, h('b', { text: `Unit ${st} vocab` }), h('span', { text: `Just this unit's ${n} words, both directions · extra practice` })); })(),
+        h('span', { text: daily === 'Mastery Check' ? 'Every 10th day: a no-hints check of your whole word bank · about 10 min' : daily === 'Vocab quiz prep' ? `Unit ${q.stage} words only, no grammar · about 10 min` : daily === 'Grammar quiz prep' ? 'Weak grammar first + a few review words · about 12 min' : daily === 'Quiz prep' ? 'Unconfirmed quiz words + weak grammar · about 12 min' : 'About 25 cards · 10–12 min' })),
+    (() => { const st = stageOf(settings), n = WORDS.filter(w => w.stage === st).length; return h('button', { class: 'btn', onclick: () => start(buildUnit(st)) }, h('b', { text: `Unit ${st} vocab review` }), h('span', { text: v.done ? `All ${n} Unit ${st} words · streak already counted today` : `All ${n} Unit ${st} words · finishing it counts for today's streak` })); })(),
     streakCard(),
     h('div', { class: 'tiles' },
       h('button', { class: 'tile', onclick: () => go('vocab') }, h('b', { text: 'Vocab' }), h('span', { text: `${dueN} due · ${shaky} shaky` })),
-      h('button', { class: 'tile', onclick: () => go('grammar') }, h('b', { text: 'Grammar' }), h('span', { text: `${weak} need work` })),
+      h('button', { class: 'tile', onclick: () => go('grammar') }, h('b', { text: 'Grammar' }), h('span', { text: q && cov === 'vocab' && q.daysLeft <= 4 ? 'After Friday' : `${weak} need work` })),
       h('button', { class: 'tile', onclick: () => go('prep') }, h('b', { text: 'Test Prep' }), h('span', { text: q ? (q.daysLeft === 0 ? 'Quiz today' : `Quiz in ${q.daysLeft}d`) : 'Mock quiz' }))),
     h('div', { class: 'row', style: 'justify-content:center' }, role === 'parent' ? null : h('button', { class: 'linkbtn', onclick: () => signOut(auth) }, 'Sign out'), h('span', { class: 'small muted', text: 'v' + APP_VERSION })));
 }
@@ -178,13 +183,15 @@ function renderGrammar() {
 
 /* ---------- test prep ---------- */
 function renderPrep() {
-  const t = today(), q = nextQuiz(settings, t), rd = q ? readiness(S, q, t) : null, stage = q ? q.stage : stageOf(settings);
+  const t = today(), q = nextQuiz(settings, t), rd = q ? readiness(S, q, t) : null, stage = q ? q.stage : stageOf(settings), cov = q ? quizCovers(q) : 'both';
   const mocks = (S.mocks || []).slice().reverse().slice(0, 8);
   show(backBar('Test Prep'), h('h1', { text: 'Test Prep' }),
-    rd ? lightCard(q, rd, false) : h('p', { class: 'muted', text: q ? `Stage ${q.stage} quiz ${fmtDate(q.date)}. The readiness light turns on 4 days before.` : 'No quiz date set yet. Mom adds it when it shows up in Google Classroom.' }),
-    h('button', { class: 'btn hero', onclick: () => start(buildMock(S, settings, stage)) }, h('b', { text: `Mock quiz · Stage ${stage}` }), h('span', { text: 'Her format, scored out of 30. Feedback at the end. ~15 min' })),
-    h('button', { class: 'btn', onclick: () => start(buildTestRun(S, settings, stage)) }, h('b', { text: 'Test Run' }), h('span', { text: '10 quick questions, no help, leans on what you miss' })),
-    mocks.length ? h('section', { class: 'card' }, h('h2', { text: 'Mock quiz history' }), h('ul', { class: 'list' }, mocks.map(m => h('li', {}, h('span', { class: 'pill ' + (m.score >= 27 ? 'good' : m.score >= 24 ? 'mid' : 'bad'), text: `${fmt1(m.score)}/30` }), h('div', { text: `Stage ${m.stage} · ${fmtDate(isoFromDay(m.day))}` }))))) : null);
+    rd ? lightCard(q, rd, false) : h('p', { class: 'muted', text: q ? `${qName(q)} ${fmtDate(q.date)}. The readiness light turns on 4 days before.` : 'No quiz date set yet. Mom adds it when it shows up in Google Classroom.' }),
+    cov === 'vocab' ? h('button', { class: 'btn hero', onclick: () => start(buildMock(S, settings, stage, 'vocab')) }, h('b', { text: `Vocab mock quiz · Unit ${stage}` }), h('span', { text: '15 of this unit\'s words: meaning + middle stuff. No grammar. ~6 min' }))
+      : cov === 'grammar' ? h('button', { class: 'btn hero', onclick: () => start(buildMock(S, settings, stage, 'grammar')) }, h('b', { text: `Grammar mock quiz · Stage ${stage}` }), h('span', { text: 'Her format without the vocab section, out of 20. ~12 min' }))
+      : h('button', { class: 'btn hero', onclick: () => start(buildMock(S, settings, stage)) }, h('b', { text: `Mock quiz · Stage ${stage}` }), h('span', { text: 'Her format, scored out of 30. Feedback at the end. ~15 min' })),
+    h('button', { class: 'btn', onclick: () => start(buildTestRun(S, settings, stage, cov)) }, h('b', { text: cov === 'vocab' ? 'Vocab Test Run' : cov === 'grammar' ? 'Grammar Test Run' : 'Test Run' }), h('span', { text: '10 quick questions, no help, leans on what you miss' })),
+    mocks.length ? h('section', { class: 'card' }, h('h2', { text: 'Mock quiz history' }), h('ul', { class: 'list' }, mocks.map(m => h('li', {}, h('span', { class: 'pill ' + mockPill(m), text: mockLine(m) }), h('div', { text: mockLabel(m) }))))) : null);
 }
 const fmt1 = x => (Math.round(x * 2) / 2).toString();
 
@@ -319,9 +326,9 @@ function finishRun() {
   const t = today(); let celebrate = null, extra = [];
   if (r.sess.mode === 'mock') {
     const earned = r.results.reduce((a, x) => a + (x.pts || 1) * x.frac, 0), possible = r.results.reduce((a, x) => a + (x.pts || 1), 0);
-    const score = Math.round((earned / possible) * 30 * 2) / 2;
-    S.mocks = (S.mocks || []).concat([{ stage: r.sess.stage, day: t, at: Date.now(), score }]).slice(-40);
-    extra.push(h('p', { class: 'big', text: `${fmt1(score)} / 30` }));
+    const of = Math.round(possible), score = Math.round((earned / possible) * of * 2) / 2;
+    S.mocks = (S.mocks || []).concat([{ stage: r.sess.stage, day: t, at: Date.now(), score, of, kind: r.sess.kind || 'both' }]).slice(-40);
+    extra.push(h('p', { class: 'big', text: `${fmt1(score)} / ${of}` }));
   }
   if (r.sess.counts) {
     const before = S.streak.last === t;
@@ -346,7 +353,7 @@ function finishRun() {
 function renderParent() {
   const t = today(), v = streakView(S, t, settings), rk = rankFor(v.count), q = nextQuiz(settings, t), rd = q ? readiness(S, q, t) : null;
   const log = S.log || [];
-  const practicedDays = new Set(log.filter(l => ['daily', 'mastery', 'quizprep'].includes(l.mode)).map(l => l.day));
+  const practicedDays = new Set(log.filter(l => ['daily', 'mastery', 'quizprep', 'unit'].includes(l.mode)).map(l => l.day));
   const c = statusCounts(MAX_STAGE);
   const slipped = WORDS.filter(w => wordStatus(S.words[w.id]) === 'slipped');
   const trouble = troubleWords(S, { currentStage: MAX_STAGE }).filter(w => !slipped.includes(w));
@@ -357,13 +364,13 @@ function renderParent() {
       h('div', { class: 'spread' }, h('h2', { text: v.done ? 'Practiced today ✓' : 'Not practiced yet today' }), h('span', { class: 'pill ' + (v.done ? 'good' : 'mid'), text: `${v.count}-day streak` })),
       h('p', { class: 'small muted', text: `${rk ? `Rank: ${rk.latin} (${rk.en}). ` : ''}Best streak ${S.streak.best}. Rest days saved: ${v.rest}. ${lastLog ? `Last session ${fmtDate(isoFromDay(lastLog.day))}: ${lastLog.right}/${lastLog.n} first try.` : 'No sessions yet.'}` }),
       h('div', {}, h('div', { class: 'eyebrow', text: 'Last 21 days' }), h('div', { class: 'days', style: 'margin-top:6px' }, Array.from({ length: 21 }, (_, i) => t - 20 + i).map(d => h('i', { class: practicedDays.has(d) ? 'on' : '', title: isoFromDay(d) }))))),
-    rd ? lightCard(q, rd, false) : h('p', { class: 'small muted', text: q ? `Next quiz: Stage ${q.stage}, ${fmtDate(q.date)} (${q.daysLeft} days). Light turns on 4 days before.` : 'No quiz date set. Add one below.' }),
+    rd ? lightCard(q, rd, false) : h('p', { class: 'small muted', text: q ? `Next: ${qName(q)}, ${fmtDate(q.date)} (${q.daysLeft} days). Light turns on 4 days before.` : 'No quiz date set. Add one below.' }),
     h('section', { class: 'card' }, h('h2', { text: 'Words' }),
       h('div', { class: 'statgrid' }, ['mastered', 'known', 'learning', 'slipped', 'new'].map(k => h('div', { class: 'stat' }, h('b', { text: c[k] }), h('span', { text: STATUS_LABEL[k] })))),
       slipped.length ? h('div', {}, h('div', { class: 'eyebrow', text: 'Slipped (used to know)' }), h('p', { text: slipped.map(w => w.lemma).join(', ') })) : null,
       trouble.length ? h('div', {}, h('div', { class: 'eyebrow', text: 'Shaky' }), h('p', { text: trouble.map(w => w.lemma).join(', ') })) : null),
     h('section', { class: 'card' }, h('h2', { text: 'Grammar' }), h('ul', { class: 'list' }, SKILLS.map(k => { const ss = skillStatus(S, k.id); return h('li', {}, h('span', { class: 'pill ' + ss.level, text: ss.acc == null ? '—' : pct(ss.acc) }), h('div', { text: `Stage ${k.stage} · ${k.name}` })); }))),
-    (S.mocks || []).length ? h('section', { class: 'card' }, h('h2', { text: 'Mock quizzes' }), h('ul', { class: 'list' }, S.mocks.slice().reverse().slice(0, 10).map(m => h('li', {}, h('span', { class: 'pill ' + (m.score >= 27 ? 'good' : m.score >= 24 ? 'mid' : 'bad'), text: `${fmt1(m.score)}/30` }), h('div', { text: `Stage ${m.stage} · ${fmtDate(isoFromDay(m.day))}` }))))) : null,
+    (S.mocks || []).length ? h('section', { class: 'card' }, h('h2', { text: 'Mock quizzes' }), h('ul', { class: 'list' }, S.mocks.slice().reverse().slice(0, 10).map(m => h('li', {}, h('span', { class: 'pill ' + mockPill(m), text: mockLine(m) }), h('div', { text: mockLabel(m) }))))) : null,
     settingsCard(),
     h('section', { class: 'card' }, h('h2', { text: 'Backup' }), h('p', { class: 'small muted', text: 'Saves a copy of all progress to this device. Once a month is plenty.' }),
       h('button', { class: 'ghost', onclick: download }, 'Download progress')),
@@ -377,6 +384,9 @@ function settingsCard() {
   const stage = h('select', { id: 'set-stage' }, STAGES.map(x => h('option', { value: x, selected: (s.currentStage || MAX_STAGE) == x }, `Stage ${x}`)));
   const qDate = h('input', { type: 'date', id: 'q-date' });
   const qStage = h('select', { id: 'q-stage' }, STAGES.map(x => h('option', { value: x, selected: x === MAX_STAGE }, `Stage ${x}`)));
+  const COV = [['vocab', 'Vocab only'], ['grammar', 'Grammar only'], ['both', 'Vocab + grammar']];
+  const covSel = (val, id) => h('select', { id }, COV.map(([v, l]) => h('option', { value: v, selected: v === val }, l)));
+  const qCov = covSel('vocab', 'q-cov');
   const msg = h('p', { class: 'small muted', hidden: true });
   const rewardInputs = milestones(0).slice(0, 9).map(m => ({ m, el: h('input', { type: 'text', id: 'rw-' + m.days, value: s.rewards[m.days] || '', placeholder: 'e.g. pick Friday dinner' }) }));
   const persist = async () => {
@@ -388,9 +398,9 @@ function settingsCard() {
     h('label', { class: 'f' }, 'His name (shown on his home screen)', name),
     h('label', { class: 'f' }, 'Current stage in class', stage),
     h('div', {}, h('div', { class: 'eyebrow', text: 'Quiz dates' }),
-      s.quizzes.length ? h('ul', { class: 'list' }, s.quizzes.slice().sort((a, b) => a.date.localeCompare(b.date)).map(q => h('li', {}, h('div', { text: `Stage ${q.stage} quiz · ${fmtDate(q.date)}` }), h('button', { class: 'linkbtn', onclick: () => { s.quizzes = s.quizzes.filter(x => x !== q); settings = s; persist().then(route); } }, 'Remove')))) : h('p', { class: 'small muted', text: 'None yet.' }),
-      h('div', { class: 'fields two', style: 'margin-top:8px' }, h('label', { class: 'f' }, 'Date', qDate), h('label', { class: 'f' }, 'Covers', qStage)),
-      h('button', { class: 'ghost', style: 'margin-top:8px', onclick: () => { if (!qDate.value) return; s.quizzes.push({ date: qDate.value, stage: Number(qStage.value) }); settings = s; persist().then(route); } }, 'Add quiz date')),
+      s.quizzes.length ? h('ul', { class: 'list' }, s.quizzes.slice().sort((a, b) => a.date.localeCompare(b.date)).map(q => h('li', {}, h('div', {}, h('div', { text: `Stage ${q.stage} · ${fmtDate(q.date)}` }), (() => { const sel = covSel(quizCovers(q)); sel.style.marginTop = '4px'; sel.onchange = () => { q.covers = sel.value; settings = s; persist().then(route); }; return sel; })()), h('button', { class: 'linkbtn', onclick: () => { s.quizzes = s.quizzes.filter(x => x !== q); settings = s; persist().then(route); } }, 'Remove')))) : h('p', { class: 'small muted', text: 'None yet.' }),
+      h('div', { class: 'fields', style: 'margin-top:8px' }, h('label', { class: 'f' }, 'Date', qDate), h('label', { class: 'f' }, 'Stage', qStage), h('label', { class: 'f' }, 'Type', qCov)),
+      h('button', { class: 'ghost', style: 'margin-top:8px', onclick: () => { if (!qDate.value) return; s.quizzes.push({ date: qDate.value, stage: Number(qStage.value), covers: qCov.value }); settings = s; persist().then(route); } }, 'Add quiz date')),
     h('div', {}, h('div', { class: 'eyebrow', text: 'Days off' }), h('p', { class: 'small muted', text: 'Federal holidays and March 5 don\'t count against his streak. He can still practice on them.' })),
     h('div', {}, h('div', { class: 'eyebrow', text: 'Streak rewards' }), h('div', { class: 'fields' }, rewardInputs.map(({ m, el }) => h('label', { class: 'f' }, `${m.days} days · ${m.latin}`, el)))),
     h('div', { class: 'actions' }, h('button', { class: 'main', onclick: () => persist() }, 'Save settings')), msg);

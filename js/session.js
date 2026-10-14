@@ -2,7 +2,7 @@
 import { WORDS, W, MAX_STAGE } from './data.js';
 import { vocabL2E, vocabPick, pickOpts, gNID, gChart, gAgree, gPhrase, gFixPhrase, gVnum, gSV, gComp, gRole, gTrans, gFixSent,
   makeSkillCard, SKILLS, SKILL, CHARTS, shuffle, pickOne, PL_NOUNS, randomSentenceSpec, PHRASE_ADJS, PERSONS, NOUNS, COMP_ADJS } from './gen.js';
-import { wordStatus, skillAcc, quizWords, quizSkills, isMasteryDay } from './srs.js';
+import { wordStatus, skillAcc, quizWords, quizSkills, isMasteryDay, quizCovers } from './srs.js';
 
 const BUILD = { nid: gNID, chart: gChart, agree: gAgree, phrase: gPhrase, fixphrase: gFixPhrase, vnum: gVnum, sv: gSV, comp: gComp, role: gRole, trans: gTrans, fixsent: gFixSent };
 export function cardFromSpec(sp) {
@@ -67,11 +67,23 @@ export function buildMastery(state, today, stage) {
     specs: shuffle(list.map(w => vocabSpec(w.id, 'l2e'))) };
 }
 export function buildQuizPrep(state, settings, today, quiz) {
-  const winStart = quiz.day - 4;
+  const cov = quizCovers(quiz), winStart = quiz.day - 4;
+  const due = (excl = []) => WORDS.filter(w => w.stage <= quiz.stage && !excl.includes(w) && state.words[w.id] && state.words[w.id].seen && state.words[w.id].due <= today);
+  if (cov === 'grammar') { // grammar week: weak skills first, a few due words so older vocab doesn't slip
+    const g = skillCards(state, settings, 14, quiz.stage, quiz.stage);
+    const v = shuffle(due()).slice(0, 6).map(w => vocabSpec(w.id, 'l2e'));
+    return { mode: 'quizprep', title: 'Grammar quiz prep', specs: interleave(g, v), counts: true };
+  }
   const qw = quizWords(quiz.stage); // this unit's words: must all be confirmed
   const unconf = qw.filter(w => { const ws = state.words[w.id]; return !(ws && ws.confirmed != null && ws.confirmed >= winStart && ws.lastOk); });
-  const due = WORDS.filter(w => w.stage <= quiz.stage && !unconf.includes(w) && state.words[w.id] && state.words[w.id].seen && state.words[w.id].due <= today); // older words stay in review
-  const vocab = shuffle(unconf).slice(0, 22).concat(shuffle(due).slice(0, Math.max(0, 22 - unconf.length)));
+  if (cov === 'vocab') { // vocab week: no grammar at all. Unconfirmed unit words, then the rest of the unit, then a few older due words.
+    const rest = shuffle(qw.filter(w => !unconf.includes(w)));
+    const unit = shuffle(unconf).concat(rest).slice(0, Math.max(20, Math.min(unconf.length, 30)));
+    const older = shuffle(due(qw)).slice(0, 4);
+    return { mode: 'quizprep', title: 'Vocab quiz prep', specs: shuffle(unit.concat(older)).map(w => vocabSpec(w.id, 'l2e')), counts: true };
+  }
+  const dueW = due(unconf); // older words stay in review
+  const vocab = shuffle(unconf).slice(0, 22).concat(shuffle(dueW).slice(0, Math.max(0, 22 - unconf.length)));
   const vspecs = vocab.map(w => vocabSpec(w.id, 'l2e'));
   const g = skillCards(state, settings, 6, quiz.stage, quiz.stage);
   return { mode: 'quizprep', title: 'Quiz prep', specs: interleave(vspecs, g), counts: true };
@@ -84,7 +96,10 @@ export function buildReview(state, settings, today) {
     .sort((a, b) => state.words[a.id].due - state.words[b.id].due).slice(0, 25);
   return { mode: 'review', title: 'Vocab review', specs: due.map(w => vocabSpec(w.id, dirFor(state.words[w.id]))) };
 }
-export function buildUnit(stage) { const s = buildLearn(stage); return { ...s, mode: 'unit', title: `Unit ${stage} vocab` }; }
+// Every word in the unit once (type the meaning). Finishing it counts for the day's streak.
+export function buildUnit(stage) {
+  return { mode: 'unit', title: `Unit ${stage} vocab review`, counts: true, specs: shuffle(WORDS.filter(w => w.stage === stage)).map(w => vocabSpec(w.id, 'l2e')) };
+}
 export function buildLearn(stage) {
   const ws = WORDS.filter(w => w.stage === stage);
   const a = shuffle(ws).map(w => pickSpec(w.id)); // first see it: tap the meaning
@@ -118,8 +133,13 @@ export function followUp(sp, state, settings) {
 }
 
 /* ---------- Test Prep ---------- */
-export function buildTestRun(state, settings, stage) {
+export function buildTestRun(state, settings, stage, covers = 'both') {
   const pick = makePicker(state);
+  if (covers === 'vocab') { const unit = WORDS.filter(w => w.stage === stage); const shakyU = unit.filter(w => { const s = state.words[w.id]; return !s || !s.seen || s.lvl <= 2 || s.slipped != null; });
+    return { mode: 'testrun', title: 'Vocab Test Run', test: true, specs: shuffle(shakyU).concat(shuffle(unit.filter(w => !shakyU.includes(w)))).slice(0, 10).map(w => vocabSpec(w.id, 'l2e')) }; }
+  if (covers === 'grammar') { const sk = SKILLS.filter(s => s.stage <= stage).sort((a, b) => (skillAcc(state, a.id) ?? 0) - (skillAcc(state, b.id) ?? 0));
+    const specs = []; for (let i = 0; i < 10; i++) specs.push(gSpec(makeSkillCard(sk[i % Math.min(sk.length, 6)].id, pick, stage)));
+    return { mode: 'testrun', title: 'Grammar Test Run', test: true, specs: shuffle(specs) }; }
   const bank = WORDS.filter(w => w.stage <= stage);
   const shaky = bank.filter(w => { const s = state.words[w.id]; return s && s.seen && (s.lvl <= 2 || s.slipped != null); });
   const vocabPool = shuffle(shaky).concat(shuffle(bank.filter(w => !shaky.includes(w))));
@@ -129,8 +149,13 @@ export function buildTestRun(state, settings, stage) {
   return { mode: 'testrun', title: 'Test Run', test: true, specs: shuffle(specs) };
 }
 // Mock quiz in the teacher's format, scored out of 30.
-export function buildMock(state, settings, stage) {
+export function buildMock(state, settings, stage, covers = 'both') {
   const pick = makePicker(state);
+  if (covers === 'vocab') { // this unit's words only, like the real vocab quiz
+    const unit = shuffle(WORDS.filter(w => w.stage === stage && w.kind !== 'x')).slice(0, 12).concat(shuffle(WORDS.filter(w => w.stage === stage && w.kind === 'x')).slice(0, 3));
+    return { mode: 'mock', kind: 'vocab', title: `Vocab mock quiz · Unit ${stage}`, test: true, stage, sections: [{ name: 'Vocabulary: meaning + middle stuff' }],
+      specs: shuffle(unit).map(w => ({ ...vocabSpec(w.id, 'l2e'), sec: 0, pts: 1 })) };
+  }
   // Vocab section: this unit's words only (like the real test). Grammar sections below use every word so far.
   const cur = shuffle(WORDS.filter(w => w.stage === stage && w.kind !== 'x'));
   const misc = shuffle(WORDS.filter(w => w.stage === stage && w.kind === 'x'));
@@ -155,6 +180,7 @@ export function buildMock(state, settings, stage) {
   sections.push({ name: 'IV. Charts', pts: 1, specs: CHARTS.filter(c => c.stage <= stage).map(c => ({ t: 'g', type: 'chart', params: [c.id], skill: 'charts' })) });
   const tr = []; for (let i = 0; i < 5; i++) tr.push(gSpec(makeSkillCard(stage >= 2 ? 'trans' : 'phrase', pick, stage)));
   sections.push({ name: 'V. Translating', pts: 1, specs: tr });
+  if (covers === 'grammar') sections.shift(); // grammar quiz: no vocab section
   const specs = []; sections.forEach((s, si) => s.specs.forEach(sp => specs.push({ ...sp, sec: si, pts: s.pts })));
-  return { mode: 'mock', title: `Mock quiz · Stage ${stage}`, test: true, stage, sections: sections.map(s => ({ name: s.name })), specs };
+  return { mode: 'mock', kind: covers, title: covers === 'grammar' ? `Grammar mock quiz · Stage ${stage}` : `Mock quiz · Stage ${stage}`, test: true, stage, sections: sections.map(s => ({ name: s.name })), specs };
 }

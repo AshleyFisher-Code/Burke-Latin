@@ -249,10 +249,46 @@ for (let i = 0; i < 50; i++) {
   if (v.length !== 10 || v.some(s => W[s.id].stage !== 2)) { uf++; console.log('mock vocab not unit-only', v.map(s => s.id)); break; }
   const pts = m.specs.reduce((a, s) => a + s.pts, 0); if (pts !== 30) { uf++; console.log('mock pts', pts); break; }
 }
-const u = buildUnit(2); if (u.specs.some(s => s.id && W[s.id].stage !== 2) || u.counts) { uf++; console.log('unit session wrong'); }
+const u = buildUnit(2); if (u.specs.some(s => s.id && W[s.id].stage !== 2) || !u.counts || u.specs.length !== WORDS.filter(w => w.stage === 2).length) { uf++; console.log('unit session wrong'); }
 const s7 = blankState(); const qd7 = dayFromISO('2026-10-16'), q7 = { stage: 2, day: qd7, daysLeft: 2 };
 WORDS.filter(w => w.stage === 2).forEach(w => updateWord(s7, w.id, true, qd7 - 2));
 g.SKILLS.forEach(sk => { s7.skills[sk.id] = { hist: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1] }; });
 s7.mocks.push({ stage: 2, day: qd7 - 1, at: Date.now(), score: 28 });
 const r7 = readiness(s7, q7, qd7 - 1); if (r7.color !== 'green' || r7.total !== 30) { uf++; console.log('unit-only readiness', r7); }
 console.log(`unit checks: ${uf ? uf + ' FAILED' : 'all passed'}`); if (uf) process.exit(1);
+
+/* ---------- quiz types: vocab-only / grammar-only ---------- */
+import { buildQuizPrep } from '../js/session.js';
+import { quizCovers } from '../js/srs.js';
+let qf = 0; const bad = m => { qf++; console.log(m); };
+const qv = dayFromISO('2026-10-16'), vq = { stage: 2, day: qv, daysLeft: 2, covers: 'vocab' }, gq = { stage: 2, day: qv + 7, daysLeft: 2, covers: 'grammar' };
+for (let i = 0; i < 50; i++) {
+  const st0 = blankState();
+  const p = buildQuizPrep(st0, {}, qv - 2, vq);
+  if (p.specs.some(x => x.t === 'g')) { bad('vocab prep has grammar'); break; }
+  if (p.specs.filter(x => W[x.id].stage === 2).length < 20 || !p.counts) { bad('vocab prep too few unit words'); break; }
+  const d = buildDaily(st0, {}, qv - 2, vq); if (d.specs.some(x => x.t === 'g')) { bad('daily during vocab week has grammar'); break; }
+  const gp = buildQuizPrep(st0, {}, qv + 5, gq); if (gp.specs.filter(x => x.t === 'g').length < 14) { bad('grammar prep light on grammar'); break; }
+  const mv = buildMock(st0, {}, 2, 'vocab'); if (mv.specs.some(x => x.t === 'g' || W[x.id].stage !== 2) || mv.kind !== 'vocab' || mv.specs.length !== 15) { bad('vocab mock wrong'); break; }
+  const mg = buildMock(st0, {}, 2, 'grammar'); if (mg.specs.some(x => x.t !== 'g') || mg.specs.reduce((a, x) => a + x.pts, 0) !== 20) { bad('grammar mock wrong'); break; }
+  const tv = buildTestRun(st0, {}, 2, 'vocab'); if (tv.specs.some(x => x.t === 'g' || W[x.id].stage !== 2)) { bad('vocab test run wrong'); break; }
+  const tg = buildTestRun(st0, {}, 2, 'grammar'); if (tg.specs.some(x => x.t !== 'g')) { bad('grammar test run wrong'); break; }
+  for (const b of [p, gp, mv, mg, tv, tg]) for (const sp of b.specs) { const c = cardFromSpec(JSON.parse(JSON.stringify(sp))); if (!c || !c.check) bad('bad card'); }
+}
+// readiness: vocab quiz ignores grammar entirely
+const sv = blankState();
+WORDS.filter(w => w.stage === 2).forEach(w => updateWord(sv, w.id, true, qv - 2));
+let rv = readiness(sv, vq, qv - 1);
+if (rv.color === 'green' || rv.reasons.some(r => /Grammar/.test(r))) bad('vocab readiness mentions grammar / green without mock ' + JSON.stringify(rv.reasons));
+sv.mocks.push({ stage: 2, day: qv - 1, at: Date.now(), score: 14, of: 15, kind: 'vocab' });
+rv = readiness(sv, vq, qv - 1); if (rv.color !== 'green') bad('vocab readiness should be green ' + JSON.stringify(rv.reasons));
+sv.mocks = [{ stage: 2, day: qv - 1, at: Date.now(), score: 28, of: 30, kind: 'both' }];
+rv = readiness(sv, vq, qv - 1); if (rv.color === 'green') bad('full mock should not count as vocab mock');
+// grammar quiz ignores vocab confirmation
+const sg = blankState(); g.SKILLS.forEach(sk => { sg.skills[sk.id] = { hist: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1] }; });
+sg.mocks.push({ stage: 2, day: qv + 6, at: Date.now(), score: 19, of: 20, kind: 'grammar' });
+const rg = readiness(sg, gq, qv + 6); if (rg.color !== 'green' || rg.reasons.some(r => /words/.test(r))) bad('grammar readiness ' + JSON.stringify(rg.reasons));
+if (quizCovers({ stage: 2, date: 'x' }) !== 'both') bad('old quizzes default to both');
+// finishing the unit review counts for the streak
+const su = blankState(); completeDay(su, 300); if (su.streak.count !== 1) bad('streak');
+console.log(`quiz-type checks: ${qf ? qf + ' FAILED' : 'all passed'}`); if (qf) process.exit(1);
