@@ -10,4 +10,4 @@ export const firebaseConfig = {
 };
 export const STUDENT_UID = 'mhP5pRPUlXg3nooLBIsjMyHvF6j2';
 export const PARENT_UID = 'xFqJAFGGioUUadmrgbY7Fpbixwm2';
-export const APP_VERSION = '1.2.0';
+export const APP_VERSION = '1.3.0';

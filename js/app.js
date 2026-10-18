@@ -213,7 +213,7 @@ function renderRun() {
   const inputs = c.fields.map((f, i) => f.choices ? choiceGroup(f, i, autoGo) : h('input', { type: 'text', id: 'f' + i, autocomplete: 'off', autocorrect: 'off', autocapitalize: 'off', spellcheck: 'false', enterkeyhint: i < c.fields.length - 1 ? 'next' : 'go', placeholder: f.ph || '' }));
   c.inputs = inputs;
   const p = c.prompt;
-  const promptEl = p.latin ? h('div', {}, h('p', { class: 'latin' + (p.latin.length > 22 ? ' sm' : '') , text: p.latin }), p.sub ? h('div', { class: 'sub', text: p.sub }) : null)
+  const promptEl = p.latin ? h('div', {}, h('p', { class: 'latin' + (p.latin.length > 45 ? ' xs' : p.latin.length > 22 ? ' sm' : '') , text: p.latin }), p.sub ? h('div', { class: 'sub', text: p.sub }) : null, p.help && p.help.length ? h('div', { class: 'help' }, h('b', { text: 'Help: ' }), p.help.join(' · ')) : null)
     : p.eng ? h('p', { class: 'eng', text: p.eng }) : p.chart ? h('p', { class: 'latin sm', text: p.chart }) : null;
   const fb = h('div', { hidden: true });
   const btn = h('button', { class: 'main', id: 'go' }, test ? (run.idx === run.deck.length - 1 ? 'Finish' : 'Submit') : 'Check');

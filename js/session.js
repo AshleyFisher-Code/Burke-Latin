@@ -1,10 +1,10 @@
 // Builds practice sessions as lists of small, saveable "specs", and turns specs back into cards.
 import { WORDS, W, MAX_STAGE } from './data.js';
-import { vocabL2E, vocabPick, pickOpts, gNID, gChart, gAgree, gPhrase, gFixPhrase, gVnum, gSV, gComp, gRole, gTrans, gFixSent,
+import { vocabL2E, vocabPick, pickOpts, gNID, gChart, gAgree, gPhrase, gFixPhrase, gVnum, gSV, gComp, gRole, gTrans, gFixSent, gTrans2, gFix2, randomSpec2, poolsFor, fix2Errors,
   makeSkillCard, SKILLS, SKILL, CHARTS, shuffle, pickOne, PL_NOUNS, randomSentenceSpec, PHRASE_ADJS, PERSONS, NOUNS, COMP_ADJS } from './gen.js';
 import { wordStatus, skillAcc, quizWords, quizSkills, isMasteryDay, quizCovers } from './srs.js';
 
-const BUILD = { nid: gNID, chart: gChart, agree: gAgree, phrase: gPhrase, fixphrase: gFixPhrase, vnum: gVnum, sv: gSV, comp: gComp, role: gRole, trans: gTrans, fixsent: gFixSent };
+const BUILD = { nid: gNID, chart: gChart, agree: gAgree, phrase: gPhrase, fixphrase: gFixPhrase, vnum: gVnum, sv: gSV, comp: gComp, role: gRole, trans: gTrans, fixsent: gFixSent, trans2: gTrans2, fix2: gFix2 };
 export function cardFromSpec(sp) {
   let c;
   // He only ever reads Latin and answers in English. Old saved English→Latin cards are shown as Latin→English.
@@ -164,10 +164,14 @@ export function buildMock(state, settings, stage, covers = 'both') {
   sections.push({ name: 'I. Vocabulary', pts: 1, specs: shuffle(vocab).map(w => vocabSpec(w.id, 'l2e')) });
   if (stage >= 2) {
     const fx = [];
-    for (let i = 0; i < 2; i++) {
+    for (let i = 0; i < 1; i++) {
       const spec = randomSentenceSpec(pick, PL_NOUNS.filter(w => w.stage <= stage), COMP_ADJS.filter(w => w.stage <= stage && w.phrase), PERSONS.filter(w => w.stage <= stage), true);
       const err = spec.k === 'adj' ? pickOne(['verb', 'adj-g', 'adj-n']) : 'verb';
       fx.push({ t: 'g', type: 'fixsent', params: [spec, err], skill: 'fixsent' }, { t: 'g', type: 'trans', params: [spec], skill: 'trans', afterFix: true });
+    }
+    { // one two-part sentence, like the class worksheets
+      const sp2 = randomSpec2(pick, poolsFor(stage), false);
+      fx.push({ t: 'g', type: 'fix2', params: [sp2, pickOne(fix2Errors(sp2))], skill: 'fixsent' }, { t: 'g', type: 'trans2', params: [sp2], skill: 'trans', afterFix: true });
     }
     sections.push({ name: 'II. Fix the error (correct it, then translate it)', pts: 1, specs: fx });
   } else {

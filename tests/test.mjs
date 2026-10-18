@@ -229,6 +229,91 @@ ok(g.vocabL2E(W.habitat), ['sits', 'singular'], false, 'habitat sits'); ok(g.voc
 // sentence translation stays strict on number
 ok(g.gTrans({ k: 'act', s: ['puella'], num: 'sg', v: 'habitat' }), ['the girl live'], false, 'sentence keeps -s strict');
 
+/* ---------- two-part sentences (class worksheet style) ---------- */
+let two = 0, fix2n = 0;
+const VFORM = {}; WORDS.filter(w => w.kind === 'v').forEach(w => { VFORM[letters(w.lemma)] = w.num; VFORM[letters(w.pair)] = w.num === 'sg' ? 'pl' : 'sg'; });
+Object.values(g.HELP_VERBS).forEach(v => { VFORM[letters(v.lemma)] = 'sg'; VFORM[letters(v.pair)] = 'pl'; });
+const pools2 = g.poolsFor(2), pick2 = g.pickOne;
+const seen2 = new Set();
+for (let i = 0; i < 6000; i++) {
+  const sp = g.randomSpec2(pick2, pools2, true); const key = JSON.stringify(sp); if (seen2.has(key)) continue; seen2.add(key); two++;
+  const st = g.sentence2(sp), c = g.gTrans2(sp);
+  assert(!/undefined|null/.test(st.latin + st.correct), 'undefined in ' + st.latin + ' / ' + st.correct);
+  // independent Latin check: each part's verb and complement agree with its subject
+  st.parts.forEach((p, pi) => { if (!p.cl) return; const S = p.S;
+    const vt = letters(p.lat[p.idx.v]); assert(VFORM[vt] === S.num, `verb number ${st.latin} part ${pi}`);
+    if (p.cl.k === 'adj' || p.cl.k === 'adj2') { const a = AF[letters(p.lat[p.idx.a])]; assert(a && a.id === p.cl.a && W[p.cl.a].forms[S.g][S.num] === p.lat[p.idx.a], `complement agreement ${st.latin}`); }
+    if (p.cl.sa) assert(p.lat[1] === W[p.cl.sa].forms[S.g][S.num], `describing adj ${st.latin}`);
+    if (p.cl.k === 'noun' && p.cl.ca) { const cn = W[p.cl.c]; assert(p.lat.includes(W[p.cl.ca].forms[cn.g][S.num]), `noun+adj complement ${st.latin}`); }
+    if (S.compound) assert(S.num === 'pl', 'compound is plural');
+    if (p.cl.place) assert(p.lat.join(' ').includes(p.cl.place === 'villa' ? 'in villā' : 'in agrīs'), 'place phrase');
+  });
+  assert(st.help.every(Boolean), 'help text');
+  ok(c, [st.correct], true, 'two-part key ' + st.latin);
+  ok(c, [st.correct.toLowerCase().replace(/[.,]/g, '')], true, 'two-part lower ' + st.latin);
+  // every accepted first part with a few accepted second parts
+  const j = st.join ? ' ' + st.join + ' ' : ' ';
+  for (const a of st.parts[0].acc.slice(0, 4)) for (const b of st.parts[1].acc.slice(0, 4)) ok(c, [a + j + b], true, 'two-part acc ' + st.latin);
+  // wrong number in either part is never accepted
+  st.flips.forEach((f, fi) => { if (!f) return; const other = st.parts[1 - fi].acc[0];
+    for (const fa of f.acc.slice(0, 3)) if (!st.parts[fi].acc.includes(fa)) ok(c, [fi === 0 ? fa + j + other : st.parts[0].acc[0] + j + fa], false, 'two-part flipped ' + st.latin); });
+  if (st.join) { ok(c, [st.parts[0].acc[0] + (st.join === 'and' ? ' but ' : ' and ') + st.parts[1].acc[0]], false, 'wrong conjunction ' + st.latin); ok(c, [st.parts[0].acc[0]], false, 'half only ' + st.latin); }
+  // dropping "not" is wrong
+  if (st.parts.some(p => p.cl && p.cl.neg)) ok(c, [st.correct.replace(/ not\b/g, '').replace(/does (\w+)/, '$1s').replace(/\bdo (\w+)/, '$1')], false, 'dropped not ' + st.latin);
+  // misspelled content word still passes
+  const mis = st.correct.replace(/\b(girl|teacher|student|happy|tired|farmer|friend|sailor|reads|writes|angry|garden|walk|walks|family|horse|road)\b/i, m => m.length > 4 ? m.slice(0, 2) + m[3] + m[2] + m.slice(4) : m + m.slice(-1));
+  if (mis !== st.correct) ok(c, [mis], true, 'two-part misspelled ' + st.latin + ' <- ' + mis);
+  // rebuilt from its saved spec
+  const rb = cardFromSpec({ t: 'g', type: 'trans2', params: [sp], skill: 'trans' }); assert(rb.correct === c.correct, 'rebuild trans2');
+  // fix-the-error versions
+  if (sp.q) continue;
+  for (const e of g.fix2Errors(sp)) {
+    const f = g.gFix2(sp, e), bad = f.prompt.latin; fix2n++;
+    ok(f, [f.correct], true, 'fix2 correct ' + bad); ok(f, [bad], false, 'fix2 bad ' + bad);
+    assert(f.fields[0].choices.includes(f.correct), 'fix2 choices include answer');
+    assert(!f.fields[0].choices.some(x => letters(x) === letters(bad)), 'fix2 choices exclude the prompt');
+    assert(new Set(f.fields[0].choices.map(letters)).size === f.fields[0].choices.length, 'fix2 choices distinct');
+    for (const ch of f.fields[0].choices) if (ch !== f.correct) ok(f, [ch], false, 'fix2 distractor ' + ch);
+    const gw = f.correct.replace(/\.$/, '').split(' ').map(letters), bw = bad.replace(/\.$/, '').split(' ').map(letters);
+    assert(gw.length === bw.length && gw.filter((t, k) => t !== bw[k]).length === 1, 'fix2 differs by one word: ' + bad);
+    // the error really is an error: the changed word disagrees with its clause's subject
+    const p = st.parts[e.p], k = gw.findIndex((t, k2) => t !== bw[k2]), tok = bw[k];
+    if (VFORM[tok]) assert(VFORM[tok] !== p.S.num, 'fix2 verb error real ' + bad);
+    else if (AF[tok]) assert(!(AF[tok].g === p.S.g && AF[tok].num === p.S.num), 'fix2 adj error real ' + bad);
+    else assert(false, 'fix2 changed an unexpected word ' + bad);
+    if (p.S.implied && AF[tok]) assert(AF[tok].num !== p.S.num, 'implied-subject error must clash in number ' + bad);
+  }
+}
+// Burke's own worksheet answers (week of Oct 12) grade the way his teacher would
+const WS = [
+  [{ c1: { k: 'noun', s: ['magistra', 'magister'], nums: ['sg', 'sg'], c: 'amicus', order: 0 }, c2: { k: 'act', imp: true, v: 'legit', place: 'agri' }, conj: 'et' },
+    [['The teacher and teacher are friend and read in feild', false], ['the teacher and the teacher are friends and read in the fields', true], ['the teacher and teacher are freinds and they read in the feilds', true]]],
+  [{ c1: { k: 'act', s: ['poeta', 'amicus'], nums: ['sg', 'sg'], v: 'scribit' }, c2: { k: 'adj', s: ['amicus'], num: 'sg', a: 'defessus' }, conj: 'sed' },
+    [['the poet and freind write but the freind is tierd', true], ['the poet and friend sit but the friend is tired', false]]],
+  [{ q: 1, s: 'magister', c: 'vir', ca: 'bonus' }, [['who is the teacher? he is good man', true], ['who is the teacher? the man is good', true], ['who is the teacher? he is a good men', false]]],
+  [{ c1: { k: 'act', s: ['puella', 'puer'], nums: ['pl', 'pl'], v: 'ambulat' }, c2: { k: 'adj', imp: true, a: 'defessus', neg: true }, conj: 'sed' },
+    [['the girls and boys walk but they are not tired', true], ['the girls and boys walk but are not tired', true], ['the girls and boys walks but they are not tired', false], ['the girls and boys walk but they is not tired', false]]],
+  [{ c1: { k: 'adj', s: ['villa'], num: 'sg', a: 'parvus' }, c2: { k: 'adj', s: ['familia'], num: 'sg', a: 'laetus' }, conj: 'sed' }, [['the villa is small but the family is happy', true]]],
+  [{ c1: { k: 'adj', s: ['equus'], num: 'pl', a: 'molestus', order: 1 }, c2: { k: 'adj', s: ['agricola'], num: 'sg', a: 'laetus', neg: true }, conj: 'et' },
+    [['the horses is annoying and the farmer is not happy', false], ['the horses are annoying and the farmer is not happy', true], ['the horse is annoying and the farmer is not happy', false]]],
+  [{ c1: { k: 'act', s: ['puella', 'puer'], nums: ['pl', 'pl'], v: 'habitat', place: 'villa' }, c2: { k: 'adj', imp: true, a: 'romanus' }, conj: 'et' },
+    [['the girls and boys live in villa and and are roman', true], ['the girls and boys live in the house and they are Roman', true]]],
+  [{ c1: { k: 'adj', s: ['villa'], num: 'sg', sa: 'vicinus', a: 'magnus', order: 1 }, c2: { k: 'act', s: ['familia'], num: 'sg', v: 'habitat', place: 'villa', neg: true }, conj: 'sed' },
+    [['the neighboring villa is big but the family does not live in villa', true], ['the neighboring villa is big but the family doesnt live in the house', true], ['the big villa is neighboring but the family does not live in villa', false], ['the neighboring villa is big but the family lives in villa', false]]],
+  [{ c1: { k: 'adj', s: ['cibus'], num: 'sg', a: 'malus' }, c2: { k: 'adj', s: ['familia'], num: 'sg', a: 'laetus', neg: true }, conj: 'et' },
+    [['the food is bad and the family is not happy', true], ['the bad food is and the family is not happy', false]]],
+];
+for (const [sp, answers] of WS) { const c = g.gTrans2(sp); for (const [a, want] of answers) ok(c, [a], want, 'worksheet ' + c.prompt.latin); }
+// Session builders produce two-part cards and they all rebuild
+let saw2 = 0;
+for (let i = 0; i < 40; i++) for (const b of [buildSkill(st, {}, 'trans'), buildSkill(st, {}, 'fixsent'), buildMock(st, {}, 2), buildMock(st, {}, 2, 'grammar')])
+  for (const sp of b.specs) { const c = cardFromSpec(sp); if (c.type === 'trans2' || c.type === 'fix2') { saw2++; ok(c, [c.correct], true, 'session two-part ' + c.summary); } }
+assert(saw2 > 50, 'sessions include two-part sentences');
+// Stage 1 practice never gets two-part sentences
+for (let i = 0; i < 40; i++) { const c = g.makeSkillCard('trans', g.pickOne, 1); assert(c.type !== 'trans2', 'no two-part at stage 1'); }
+// Extra worksheet words are help only: never vocab cards, never in the vocab test
+assert(!WORDS.some(w => ['ambulat', 'quis', 'in'].includes(w.id)), 'help words stay out of the vocab list');
+console.log(`two-part sentences ${two}, fix-the-error ${fix2n}`);
 console.log(`checks: ${n}  failures: ${fails.length}  (phrases ${phraseCount}, sentences ${sentCount})`);
 if (fails.length) { console.log(fails.slice(0, 80).join('\n')); process.exit(1); }
 /* ---------- days off ---------- */

@@ -425,9 +425,10 @@ export function makeSkillCard(skillId, pick = pickOne, maxStage = 99) {
     case 'sv': { const v = pick(WORDS.filter(w => w.kind === 'v' && w.num === 'sg')); const subjPool = v.id === 'est' ? nouns : persons; return coin(0.3) ? gSV(pair2(), 'pl', v.id) : gSV([pick(subjPool).id], num(), v.id); }
     case 'comp': { if (coin(0.3)) return gComp(pair2(), 'pl', pick(cadjs.filter(x => fits(W.puer, x))).id); const n = pick(nouns); return gComp([n.id], num(), adjFor(n, cadjs).id); }
     case 'role': { const n = pick(nouns); return gRole(n.id, num(), adjFor(n, cadjs).id, pickOne([0, 1, 1]), coin(0.5) ? 'subject' : 'complement'); }
-    case 'trans': return gTrans(randomSentenceSpec(pick, nouns, cadjs, persons));
+    case 'trans': return maxStage >= 2 && coin(0.5) ? gTrans2(randomSpec2(pick, poolsFor(maxStage))) : gTrans(randomSentenceSpec(pick, nouns, cadjs, persons));
     case 'fixsent': {
       const r = Math.random();
+      if (maxStage >= 2 && r >= 0.6) { const sp = randomSpec2(pick, poolsFor(maxStage), false); return gFix2(sp, pickOne(fix2Errors(sp))); }
       if (r < 0.2) { const m = pick(MASC_TWINS.map(id => W[id]).filter(w => w.stage <= maxStage)) || W.amicus; const [x, y] = mixedPair(persons); return gFixSent({ k: 'noun', s: [x, y], num: 'pl', c: m.id, order: 1 }, 'noun-g'); }
       const spec = randomSentenceSpec(pick, nouns, cadjs, persons, true);
       return gFixSent(spec, spec.k === 'adj' ? pickOne(['verb', 'adj-g', 'adj-g', 'adj-n']) : 'verb');
@@ -449,4 +450,275 @@ export function randomSentenceSpec(pick, nouns, padjs, persons, noAct = false) {
   }
   if (r < 0.6) { const a = pick(persons); const b = pick(persons.filter(w => w.id !== a.id)); return { k: 'adj', s: [a.id, b.id], num: 'pl', a: pick(padjs.filter(x => fits(a, x))).id, order: coin(0.5) ? 1 : 0 }; }
   const n = pick(nouns); return { k: 'adj', s: [n.id], num: coin(0.5) ? 'sg' : 'pl', a: pick(padjs.filter(a => fits(n, a))).id, order: coin(0.5) ? 1 : 0, neg: coin(0.15) };
+}
+
+/* =============== two-part sentences (like the class translation worksheets) =============== */
+// Words the class uses in sentences before they're on a vocab list. Shown as help on the card,
+// like the teacher's vocab help: he recognizes them, he's never quizzed on them.
+export const HELP_VERBS = {
+  ambulat: { id: 'ambulat', lemma: 'ambulat', pair: 'ambulant', mean: ['walks', 'is walking'], base: 'walk', prog: 'walking', help: 'ambulat / ambulant = walks / walk' },
+};
+export const PLACES = {
+  villa: { lat: ['in', 'villā'], en: ['in house', 'in villa', 'in summer house', 'in country house'], show: 'in the house', help: 'in villā = in the house' },
+  agri: { lat: ['in', 'agrīs'], en: ['in fields'], show: 'in the fields', help: 'in agrīs = in the fields' },
+};
+const QUIS_HELP = 'quis = who?';
+const CLASH = [['magnus', 'parvus'], ['bonus', 'malus'], ['laetus', 'iratus'], ['laetus', 'defessus']];
+const clash = (a, b) => a === b || CLASH.some(([x, y]) => (x === a && y === b) || (x === b && y === a));
+export const ATTR_ADJS = ADJS.filter(a => a.phrase && a.id !== 'multus');
+const verbObj = id => HELP_VERBS[id] || W[id];
+export const ACT2_VERBS = ['legit', 'sedet', 'scribit', 'ambulat', 'habitat'];
+const an = s => (/^[aeiou]/.test(s) ? 'an ' : 'a ') + s;
+const pronOf = (num, g, person) => (num === 'pl' ? ['they'] : person ? (g === 'm' ? ['he', 'he/she'] : ['she', 'he/she']) : ['it']);
+// English for an action verb, optionally negated (does not walk / is not walking).
+export function actEnglish(vw, num, neg) {
+  const extra = vw.id === 'habitat' ? ['dwell'] : [];
+  if (!neg) return num === 'sg' ? vw.mean.filter(m => !/ in$/.test(m) && m !== 'sits down') : [vw.base, 'are ' + vw.prog, ...extra];
+  return num === 'sg' ? ['does not ' + vw.base, 'is not ' + vw.prog, ...extra.map(x => 'does not ' + x)] : ['do not ' + vw.base, 'are not ' + vw.prog, ...extra.map(x => 'do not ' + x)];
+}
+// Subject: one noun (optional describing adjective sa) or two nouns joined by et (each sg or pl).
+function subj2(cl) {
+  const ws = cl.s.map(id => W[id]);
+  if (ws.length === 1) {
+    const n = ws[0], num = cl.num, sa = cl.sa ? W[cl.sa] : null;
+    const lat = [nForm(n, num)].concat(sa ? [aForm(sa, n.g, num)] : []);
+    const en = []; for (const nm of nEn(n, num)) { if (sa) for (const am of sa.mean) en.push(`${am} ${nm}`); else en.push(nm); }
+    return { lat, en, show: `the ${sa ? sa.mean[0] + ' ' : ''}${nEn(n, num)[0]}`, num, g: n.g, person: n.person, latin: lat.join(' '), noun: n, sa };
+  }
+  const nums = cl.nums || ['sg', 'sg'];
+  const lat = [nForm(ws[0], nums[0]), 'et', nForm(ws[1], nums[1])];
+  const en = []; for (const x of nEn(ws[0], nums[0])) for (const y of nEn(ws[1], nums[1])) en.push(`${x} and ${y}`);
+  return { lat, en, show: `the ${nEn(ws[0], nums[0])[0]} and the ${nEn(ws[1], nums[1])[0]}`, num: 'pl', g: ws.some(w => w.g === 'm') ? 'm' : 'f', person: true, latin: lat.join(' '), compound: true };
+}
+// One clause. cl = {k:'adj'|'adj2'|'noun'|'act', s, num, nums, sa, a, a2, c, ca, v, place, neg, order, imp}
+// prev = subject of the clause before (for an implied subject: "...sed non defessī sunt").
+export function clause(cl, prev) {
+  const S = cl.imp ? { lat: [], en: [], show: null, num: prev.num, g: prev.g, person: prev.person, latin: prev.latin, implied: true, prevEn: prev.en } : subj2(cl);
+  const pron = pronOf(S.num, S.g, S.person);
+  const subjEn = S.implied ? [...pron, ...S.prevEn, ''] : S.en;
+  const subjShow = S.implied ? pron[0] : S.show;
+  const neg = cl.neg ? ['non'] : [];
+  let lat, en = [], show, idx = {};
+  if (cl.k === 'act') {
+    const vw = verbObj(cl.v), vf = S.num === 'sg' ? vw.lemma : vw.pair, pl = cl.place ? PLACES[cl.place] : null;
+    lat = [...S.lat, ...neg, ...(pl ? pl.lat : []), vf]; idx.v = lat.length - 1;
+    const vEn = actEnglish(vw, S.num, cl.neg);
+    for (const so of subjEn) for (const ve of vEn) for (const pe of pl ? pl.en : ['']) en.push(`${so} ${ve} ${pe}`);
+    show = `${subjShow} ${vEn[0]}${pl ? ' ' + pl.show : ''}`;
+  } else {
+    const LVw = LV(S.num), lvEn = S.num === 'sg' ? 'is' : 'are';
+    let comp, compEn, compShow;
+    if (cl.k === 'adj') { const a = W[cl.a]; comp = [aForm(a, S.g, S.num)]; compEn = a.mean; compShow = a.mean[0]; }
+    else if (cl.k === 'adj2') {
+      const a = W[cl.a], b = W[cl.a2]; comp = [aForm(a, S.g, S.num), 'et', aForm(b, S.g, S.num)];
+      compEn = []; for (const x of a.mean) for (const y of b.mean) compEn.push(`${x} and ${y}`, `${y} and ${x}`); compShow = `${a.mean[0]} and ${b.mean[0]}`;
+    } else {
+      const c = W[cl.c], ca = cl.ca ? W[cl.ca] : null; comp = [nForm(c, S.num)].concat(ca ? [aForm(ca, c.g, S.num)] : []);
+      compEn = []; for (const cm of nEn(c, S.num)) { if (ca) for (const am of ca.mean) compEn.push(`${am} ${cm}`); else compEn.push(cm); }
+      const base = `${ca ? ca.mean[0] + ' ' : ''}${nEn(c, S.num)[0]}`; compShow = S.num === 'sg' ? an(base) : base;
+    }
+    // A describing adjective (villa vicina est magna) or a noun + adjective complement goes after the verb, so position shows which is which.
+    const order = cl.imp ? 0 : cl.sa || (cl.k === 'noun' && cl.ca) ? 1 : cl.order || 0;
+    lat = order === 1 ? [...S.lat, ...neg, LVw, ...comp] : [...S.lat, ...comp, ...neg, LVw];
+    idx.v = lat.indexOf(LVw, S.lat.length); idx.a = lat.indexOf(comp[0], S.lat.length);
+    for (const so of subjEn) for (const ce of compEn) en.push(`${so} ${lvEn} ${cl.neg ? 'not ' : ''}${ce}`);
+    // "vir bonus est" can also be read "the man is good"
+    if (cl.k === 'noun' && cl.ca && S.implied) { const c = W[cl.c], ca = W[cl.ca]; for (const cm of nEn(c, S.num)) for (const am of ca.mean) en.push(`${cm} ${lvEn} ${cl.neg ? 'not ' : ''}${am}`); }
+    show = `${subjShow} ${lvEn}${cl.neg ? ' not' : ''} ${compShow}`;
+  }
+  if (cl.sa) idx.sa = 1;
+  const help = [];
+  if (cl.k === 'act' && HELP_VERBS[cl.v]) help.push(HELP_VERBS[cl.v].help);
+  if (cl.place) help.push(PLACES[cl.place].help);
+  const words = [...(cl.imp ? [] : cl.s), cl.sa, cl.a, cl.a2, cl.c, cl.ca, cl.k === 'act' && !HELP_VERBS[cl.v] ? cl.v : null].filter(Boolean);
+  return { lat, acc: enAns(en), show, S, idx, help, words, cl };
+}
+// The same clause with the number flipped (for the "watch the number" contrast and hints).
+function flipClause(cl, prev) {
+  if (cl.imp) return clause(cl, { ...prev, num: prev.num === 'sg' ? 'pl' : 'sg', en: [] });
+  if (cl.s.length !== 1 || !W[cl.s[0]].pl) return null;
+  return clause({ ...cl, num: cl.num === 'sg' ? 'pl' : 'sg' }, prev);
+}
+// spec2 = {c1, c2, conj:'et'|'sed'}  or  {q:1, s, c, ca}  (Quis magister est? Vir bonus est.)
+export function sentence2(sp) {
+  if (sp.q) {
+    const s = W[sp.s], qS = { num: 'sg', g: s.g, person: true, latin: s.lemma, en: [] };
+    const c2 = clause({ k: 'noun', imp: true, c: sp.c, ca: sp.ca }, qS);
+    const qAcc = s.mean.map(m => enKey(`who is ${m}`));
+    const latin = `Quis ${s.lemma} est? ${cap(c2.lat.join(' '))}.`;
+    return { latin, parts: [{ acc: qAcc, flip: [], lat: ['quis', s.lemma, 'est'], show: `who is the ${s.mean[0]}`, S: qS }, c2], join: null,
+      correct: proper(`Who is the ${s.mean[0]}? ${cap(c2.show)}.`), help: [QUIS_HELP], words: [sp.s, ...c2.words], flips: [null, flipClause(c2.cl, qS)] };
+  }
+  const p1 = clause(sp.c1), p2 = clause(sp.c2, p1.S);
+  const f1 = flipClause(sp.c1), f2 = flipClause(sp.c2, p1.S);
+  const latin = cap([...p1.lat, sp.conj, ...p2.lat].join(' ')) + '.';
+  const joinEn = sp.conj === 'sed' ? 'but' : 'and';
+  return { latin, parts: [p1, p2], join: joinEn, flips: [f1, f2], correct: proper(`${cap(p1.show)}${sp.conj === 'sed' ? ', but' : ' and'} ${p2.show}.`),
+    help: [...new Set([...p1.help, ...p2.help])], words: [...new Set([...p1.words, ...p2.words])] };
+}
+// Typed English, cleaned: contractions and the common spellings of "does" fixed so they can't trip him.
+export const prenorm = s => (s || '').toLowerCase().replace(/\b(and|but|is|are|the|a|not|in|do|does)(\s+\1\b)+/g, '$1').replace(/[’]/g, "'").replace(/\bdoesn'?t\b/g, 'does not').replace(/\bdon'?t\b/g, 'do not')
+  .replace(/\bisn'?t\b/g, 'is not').replace(/\baren'?t\b/g, 'are not').replace(/\bwho'?s\b/g, 'who is').replace(/\b(dosent|dosnt|doesent|dosen'?t|dosn'?t)\b/g, 'does not').replace(/\b(dose|dos|duz|dus|doez)\b/g, 'does');
+function matchPart(str, part, flip) {
+  if (part.acc.includes(str)) return { ok: true };
+  const fz = str && fuzzyEn(str, part.acc, flip ? flip.acc : []); return fz ? { ok: true, fz } : { ok: false };
+}
+// Try every place the sentence could split into its two parts.
+export function gradeTwoPart(input, st) {
+  const toks = enKey(prenorm(input)).split(' ').filter(Boolean);
+  let best = null;
+  for (let i = 0; i <= toks.length; i++) {
+    let right = toks.slice(i);
+    if (st.join) { if (right[0] !== st.join) continue; right = right.slice(1); }
+    const a = matchPart(toks.slice(0, i).join(' '), st.parts[0], st.flips[0]), b = matchPart(right.join(' '), st.parts[1], st.flips[1]);
+    const score = (a.ok ? 1 : 0) + (b.ok ? 1 : 0);
+    // On a tie, pick the split whose halves are closest in length to the expected answer.
+    const off = Math.abs(i - st.parts[0].acc[0].split(' ').length) + Math.abs(right.length - st.parts[1].acc[0].split(' ').filter(Boolean).length);
+    if (!best || score > best.score || (score === best.score && off < best.off)) best = { score, off, a, b, left: toks.slice(0, i), right };
+    if (score === 2) break;
+  }
+  return { toks, best };
+}
+function partHints(part, flip, toks, which) {
+  const t = toks.join(' '), cl = part.cl, S = part.S, out = [];
+  if (!cl) { out.push('quis means who: "Who is the …?"'); return out; }
+  const subjL = S.implied ? `(no subject written, so it's still ${S.latin})` : S.latin;
+  if (flip && flip.acc.includes(t)) out.push(S.num === 'pl' ? `${subjL} is plural, so the English is plural: "${part.show}."` : `${subjL} is singular, so the English is singular: "${part.show}."`);
+  else if (cl.k !== 'act') {
+    if (!toks.includes('is') && !toks.includes('are')) out.push(`${S.num === 'sg' ? 'est' : 'sunt'} is a linking verb, so this part needs "${S.num === 'sg' ? 'is' : 'are'}."`);
+    else if (S.num === 'pl' && toks.includes('is') && !toks.includes('are')) out.push(`sunt is plural, so it's "are," not "is."`);
+    else if (S.num === 'sg' && toks.includes('are') && !toks.includes('is')) out.push(`est is singular, so it's "is," not "are."`);
+  } else if (cl.neg && !toks.includes('not')) out.push(`non + verb: "${part.show}."`);
+  else {
+    const vw = verbObj(cl.v), other = actEnglish(vw, S.num === 'sg' ? 'pl' : 'sg', cl.neg).map(normEn), mine = actEnglish(vw, S.num, cl.neg).map(normEn);
+    if (other.some(o => (' ' + t + ' ').includes(' ' + o + ' ')) && !mine.some(m => (' ' + t + ' ').includes(' ' + m + ' ')))
+      out.push(S.num === 'sg' ? `${vw.lemma} ends in -t (singular), so the English verb is singular: "${actEnglish(vw, 'sg', cl.neg)[0]}."` : `${vw.pair} ends in -nt (plural), so the English verb is plural: "${actEnglish(vw, 'pl', cl.neg)[0]}."`);
+  }
+  if (cl.k === 'noun') { const c = W[cl.c], want = nEn(c, S.num), wrong = nEn(c, S.num === 'sg' ? 'pl' : 'sg');
+    if (!toks.some(x => want.some(w => w.split(' ').includes(x))) && toks.some(x => wrong.some(w => w.split(' ').includes(x)))) out.push(`${nForm(c, S.num)} is ${S.num === 'sg' ? 'singular' : 'plural'}: "${want[0]}."`); }
+  if (cl.neg && !toks.includes('not') && cl.k !== 'act') out.push('non means not.');
+  if (cl.place && !toks.includes('in')) out.push(`Don't skip the place: "${PLACES[cl.place].show}."`);
+  if (cl.sa) { const sa = W[cl.sa]; out.push(`${aForm(sa, S.g, S.num)} sits right next to ${nForm(S.noun, S.num)} with no verb between them, so it describes the noun directly: "${S.show}."`); }
+  if (cl.k === 'adj' && !cl.sa && !S.compound && !S.implied) { const a = W[cl.a];
+    if (a.mean.some(am => S.en.some(se => (' ' + t + ' ').includes(` ${am} ${se} `) || t.startsWith(`${am} ${se}`)))) out.push(`${aForm(a, S.g, S.num)} goes with the linking verb, so it's the complement: "${part.show}." It isn't describing the noun directly.`); }
+  if (S.implied && !out.length) out.push(`No subject is written in this part, so it's the same subject as before: "${part.show}."`);
+  return out.map(proper);
+}
+export function gTrans2(sp) {
+  const st = sentence2(sp);
+  return {
+    type: 'trans2', skill: 'trans', cid: 'g:trans', words: st.words, stage: 2,
+    instr: sp.q ? 'Translate the question and the answer.' : 'Translate. Two parts: find each verb.', prompt: { latin: st.latin, help: st.help },
+    fields: [{ label: 'English', ph: 'English', wide: true }],
+    check: v => {
+      const { toks, best } = gradeTwoPart(v[0], st);
+      if (best && best.score === 2) { const fz = [best.a.fz, best.b.fz].filter(Boolean); return { ok: [true], hints: [], notes: fz.length ? [`Spelled: ${proper(fz.join(' … '))}`] : [] }; }
+      const hints = [];
+      if (!toks.length) return { ok: [false], hints, notes: [] };
+      if (st.join && !toks.includes(st.join)) hints.push(st.join === 'but' ? 'sed means but. It joins the two parts.' : 'et means and. It joins the two parts.');
+      else if (best) {
+        if (best.a.ok) hints.push(`${sp.q ? 'The question' : 'The first part'} is right.`);
+        else hints.push(...partHints(st.parts[0], st.flips[0], best.left, 0));
+        if (best.b.ok) hints.push(`${sp.q ? 'The answer' : 'The second part'} is right.`);
+        else hints.push(...partHints(st.parts[1], st.flips[1], best.right, 1));
+      }
+      return { ok: [false], hints: [...new Set(hints)], notes: [] };
+    },
+    correct: st.correct, summary: st.latin, params: [sp],
+  };
+}
+// Fix the error in a two-part sentence. err = {p: 0|1, kind: 'verb'|'adj-g'|'adj-n'|'sa-g'}
+function corrupt(part, kind) {
+  const cl = part.cl, S = part.S, lat = part.lat.slice();
+  if (kind === 'verb') {
+    if (cl.k === 'act') { const vw = verbObj(cl.v); lat[part.idx.v] = S.num === 'sg' ? vw.pair : vw.lemma; }
+    else lat[part.idx.v] = S.num === 'sg' ? 'sunt' : 'est';
+  } else if (kind === 'adj-g' || kind === 'adj-n') {
+    if (cl.k !== 'adj' && cl.k !== 'adj2') return null; const a = W[cl.a];
+    lat[part.idx.a] = kind === 'adj-g' ? aForm(a, S.g === 'm' ? 'f' : 'm', S.num) : aForm(a, S.g, S.num === 'sg' ? 'pl' : 'sg');
+  } else if (kind === 'sa-g') {
+    if (!cl.sa) return null; lat[part.idx.sa] = aForm(W[cl.sa], S.g === 'm' ? 'f' : 'm', S.num);
+  } else return null;
+  return letters(lat.join(' ')) === letters(part.lat.join(' ')) ? null : lat;
+}
+// With no subject written, only errors that clash inside the clause itself are clear-cut.
+const kindsFor = part => (part.S.implied ? ['verb', 'adj-n'] : ['verb', 'adj-g', 'adj-n', 'sa-g']);
+export function fix2Errors(sp) { const st = sentence2(sp), out = []; st.parts.forEach((p, i) => kindsFor(p).forEach(kind => { if (corrupt(p, kind)) out.push({ p: i, kind }); })); return out; }
+function assemble(sp, lats) { return cap([...lats[0], sp.conj, ...lats[1]].join(' ')) + '.'; }
+export function gFix2(sp, err) {
+  const st = sentence2(sp), good = assemble(sp, st.parts.map(p => p.lat));
+  const withErr = e => { const l = st.parts.map(p => p.lat); const c = corrupt(st.parts[e.p], e.kind); if (!c) return null; l[e.p] = c; return assemble(sp, l); };
+  const bad = withErr(err);
+  const others = uniq(fix2Errors(sp).map(withErr).filter(x => x && letters(x) !== letters(bad) && letters(x) !== letters(good)));
+  const choices = seeded([good, ...seeded(others, [sp, err]).slice(0, 2)], [sp, err, 1]);
+  const part = st.parts[err.p], S = part.S, which = err.p === 0 ? 'first' : 'second';
+  const subjL = S.implied ? `the same subject as the first part (${S.latin})` : S.latin;
+  return {
+    type: 'fix2', skill: 'fixsent', cid: 'g:fixsent', words: st.words, stage: 2,
+    instr: 'There\'s one grammar error. Tap the corrected sentence.', prompt: { latin: bad, help: st.help },
+    fields: [{ label: 'Corrected sentence', choices }],
+    check: v => {
+      const ok = letters(v[0] || '') === letters(good), hints = [];
+      if (!ok && v[0]) {
+        if (err.kind === 'verb') hints.push(`Look at the ${which} part. Its subject is ${subjL}, which is ${S.num === 'sg' ? 'singular' : 'plural'}, so the verb ends in ${S.num === 'sg' ? '-t (est)' : '-nt (sunt)'}.${S.compound ? ' Two nouns joined by et are plural.' : ''}`);
+        else if (err.kind === 'sa-g') hints.push(`Look at the ${which} part: the adjective next to ${nForm(S.noun, S.num)} has to match it (${G(S.g)}).${S.noun.trap ? ` ${S.noun.lemma} is masculine.` : ''}`);
+        else hints.push(`Look at the ${which} part: the complement has to match ${subjL} (${G(S.g)} ${S.num === 'sg' ? 'singular' : 'plural'}).`);
+      }
+      return { ok: [ok], hints, notes: [] };
+    },
+    correct: good, summary: `Fix: ${bad}`, params: [sp, err],
+  };
+}
+/* ----- random two-part specs that make sense ----- */
+export function randomClause(pick, pools, opts = {}) {
+  const { nouns, cadjs, persons, attr } = pools, r = Math.random();
+  const numOf = n => (n.pl ? (coin(0.5) ? 'sg' : 'pl') : 'sg');
+  if (opts.imp) { // same subject as before, described: "...sed non defessī sunt" / "...et Romanī sunt"
+    const host = opts.prevNoun;
+    if (host.person && coin(0.4)) { const v = pick(['legit', 'sedet', 'scribit', 'ambulat'].map(verbObj)); return { k: 'act', imp: true, v: v.id, place: coin(0.4) ? pickOne(['villa', 'agri']) : null, neg: coin(opts.negP ?? 0.25) }; }
+    const a = pick(cadjs.filter(x => fits(host, x) && !(opts.avoidAdj && clash(x.id, opts.avoidAdj)))); return { k: 'adj', imp: true, a: a.id, neg: coin(opts.negP ?? 0.35) };
+  }
+  if (r < 0.35) { // action: persons (the family can live in the house)
+    let v = pick(ACT2_VERBS.map(verbObj)); const compound = coin(0.3);
+    let s, num, nums;
+    if (compound) { const a = pick(persons), b = pick(persons.filter(w => w.id !== a.id)); s = [a.id, b.id]; num = 'pl'; nums = coin(0.4) ? ['pl', 'pl'] : ['sg', 'sg']; if (nums[0] === 'pl' && (!a.pl || !b.pl)) nums = ['sg', 'sg']; }
+    else { const subjPool = v.id === 'habitat' ? persons.concat(nouns.filter(n => n.id === 'familia')) : persons; const n = pick(subjPool); s = [n.id]; num = numOf(n); }
+    const place = v.id === 'habitat' ? 'villa' : coin(0.3) ? pickOne(['villa', 'agri']) : null;
+    return { k: 'act', s, num, nums, v: v.id, place, neg: coin(opts.negP ?? 0.25) };
+  }
+  if (r < 0.5) { // noun complement, sometimes with its own adjective (vir bonus est)
+    const sw = pick(persons), num = numOf(sw), c = pick(persons.filter(w => w.g === sw.g && w.id !== sw.id));
+    const ca = coin(0.4) ? pick(attr.filter(a => fits(c, a) && a.id !== 'vicinus')) : null;
+    return { k: 'noun', s: [sw.id], num, c: c.id, ca: ca ? ca.id : null, order: coin(0.6) ? 1 : 0, neg: coin(opts.negP ?? 0.2) };
+  }
+  if (r < 0.62) { // compound subject + adjective
+    const a = pick(persons), b = pick(persons.filter(w => w.id !== a.id)); let nums = coin(0.4) ? ['pl', 'pl'] : ['sg', 'sg'];
+    return { k: 'adj', s: [a.id, b.id], num: 'pl', nums, a: pick(cadjs.filter(x => fits(a, x) && fits(b, x))).id, order: coin(0.5) ? 1 : 0, neg: coin(opts.negP ?? 0.2) };
+  }
+  const n = pick(nouns.concat(nouns.length ? [W.cibus] : [])), num = numOf(n);
+  const a = pick(cadjs.filter(x => fits(n, x)));
+  const r2 = Math.random();
+  if (r2 < 0.3) { const sa = pick(attr.filter(x => fits(n, x) && !clash(x.id, a.id))); if (sa) return { k: 'adj', s: [n.id], num, sa: sa.id, a: a.id, order: coin(0.6) ? 1 : 0, neg: coin(opts.negP ?? 0.2) }; }
+  if (r2 < 0.45) { const b = pick(cadjs.filter(x => fits(n, x) && !clash(x.id, a.id))); if (b) return { k: 'adj2', s: [n.id], num, a: a.id, a2: b.id, order: 0 }; }
+  return { k: 'adj', s: [n.id], num, a: a.id, order: coin(0.5) ? 1 : 0, neg: coin(opts.negP ?? 0.2) };
+}
+export function randomSpec2(pick, pools, allowQuis = true) {
+  if (allowQuis && coin(0.12)) {
+    const s = pick(pools.persons), c = pick(pools.persons.filter(w => w.g === s.g && w.id !== s.id));
+    return { q: 1, s: s.id, c: c.id, ca: pick(pools.attr.filter(a => fits(c, a) && a.id !== 'vicinus')).id };
+  }
+  const conj = coin(0.5) ? 'sed' : 'et';
+  const c1 = randomClause(pick, pools);
+  const single = c1.s.length === 1, host = W[c1.s[0]];
+  if (coin(0.35) && (c1.s.length === 2 || host.person)) { // implied subject in the second part
+    const prevNoun = c1.s.length === 2 ? W.puer : host;
+    return { c1, c2: randomClause(pick, pools, { imp: true, prevNoun, avoidAdj: c1.a, negP: conj === 'sed' ? 0.6 : 0.25 }), conj };
+  }
+  let c2, tries = 0;
+  do { c2 = randomClause(pick, pools, { negP: conj === 'sed' ? 0.5 : 0.2 }); tries++; } while (tries < 8 && c2.s.some(id => c1.s.includes(id)));
+  return { c1, c2, conj };
+}
+export function poolsFor(maxStage) {
+  const f = l => { const x = l.filter(w => w.stage <= maxStage); return x.length ? x : l; };
+  return { nouns: f(PL_NOUNS), cadjs: f(COMP_ADJS).filter(a => a.phrase), persons: f(PERSONS), attr: f(ATTR_ADJS) };
 }
