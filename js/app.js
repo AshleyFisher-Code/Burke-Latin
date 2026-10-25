@@ -244,7 +244,7 @@ function choiceGroup(f, i, onPick) {
   const long = f.choices.some(x => x.length > 14);
   // 4 medium-length choices (currere, lupos…) sit in a 2×2 grid so words never break mid-word
   const maxLen = Math.max(...f.choices.map(x => x.length));
-  const grid = !long && (f.choices.length >= 4 ? maxLen > 5 : f.choices.length === 3 && maxLen > 9);
+  const grid = !long && (f.choices.length >= 4 ? maxLen > 5 : f.choices.length === 3 && maxLen > 8);
   const tight = !long && !grid && f.choices.length === 3 && maxLen > 5; // three medium words (sedemus, sedetis): a little smaller so they fit on one line
   const box = h('div', { class: 'choices' + (long ? ' long' : grid ? ' grid' : tight ? ' tight' : ''), id: 'f' + i, role: 'group' });
   const btns = f.choices.map(x => h('button', { type: 'button', class: 'opt', text: x, onclick: () => { if (ro) return; box.value = x; box.classList.remove('bad'); onPick(); } }));

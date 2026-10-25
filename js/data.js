@@ -136,7 +136,14 @@ A(3, 'calidus', 'hot', ['hot', 'warm'], null);
 A(3, 'frigidus', 'cold', ['cold', 'chilly', 'freezing'], null);
 A(3, 'ignavus', 'lazy', ['lazy'], null);
 A(3, 'infirmus', 'weak/sick', ['weak', 'sick', 'ill', 'weak/sick'], null);
-const E = (sg, pl, ing) => ({ sg, pl, ing });
+// English past tense (for the imperfect: jumped / was jumping / used to jump)
+const PAST = { love: 'loved', like: 'liked', walk: 'walked', hear: 'heard', 'listen to': 'listened to', run: 'ran', have: 'had', own: 'owned', live: 'lived', sit: 'sat',
+  scare: 'scared', frighten: 'frightened', terrify: 'terrified', fear: 'feared', annoy: 'annoyed', bother: 'bothered', see: 'saw', watch: 'watched',
+  appear: 'appeared', 'show up': 'showed up', fall: 'fell', 'fall down': 'fell down', shout: 'shouted', yell: 'yelled', teach: 'taught', hurry: 'hurried', rush: 'rushed',
+  laugh: 'laughed', smile: 'smiled', call: 'called', summon: 'summoned', praise: 'praised', work: 'worked', remain: 'remained', stay: 'stayed', speak: 'spoke', say: 'said',
+  talk: 'talked', know: 'knew', stand: 'stood', think: 'thought', 'eat dinner': 'ate dinner', dine: 'dined', 'have dinner': 'had dinner', sleep: 'slept', sail: 'sailed',
+  prepare: 'prepared', 'get ready': 'got ready', hold: 'held', keep: 'kept', save: 'saved', protect: 'protected', come: 'came', arrive: 'arrived' };
+const E = (sg, pl, ing) => ({ sg, pl, ing, past: PAST[pl] || null });
 VD(3, 'amo', 'amāre', 'amo, amāre', 'to love', ['to love', 'to like'], { tr: 'any', en: [E('loves', 'love', 'loving'), E('likes', 'like', 'liking')] });
 VD(3, 'ambulo', 'ambulāre', 'ambulo, ambulāre', 'to walk', ['to walk'], { tr: false, en: [E('walks', 'walk', 'walking')] });
 VD(3, 'audio', 'audīre', 'audio, audīre', 'to hear', ['to hear', 'to listen to', 'to listen'], { tr: 'anim', en: [E('hears', 'hear', 'hearing'), E('listens to', 'listen to', 'listening to')] });
@@ -227,13 +234,13 @@ A(6, 'sollicitus', 'worried, anxious', ['worried', 'anxious', 'nervous'], 'solic
 A(6, 'salvus', 'safe, unharmed', ['safe', 'unharmed'], 'salvage = save');
 A(6, 'scelestus', 'wicked', ['wicked', 'evil', 'villainous'], null);
 A(6, 'praeclarus', 'famous', ['famous', 'well known', 'distinguished', 'renowned', 'famed'], 'prae + clarus = very bright');
-VD(6, 'ceno', 'cenāre', 'ceno, -āre, -avī, -atus', 'to eat dinner', ['to eat dinner', 'to dine', 'to have dinner', 'eat dinner'], {});
-VD(6, 'dormio', 'dormīre', 'dormio -īre, -ivī, -itus', 'to sleep', ['to sleep'], 'dormitory = where you sleep');
-VD(6, 'navigo', 'navigāre', 'navigo -āre, -avī, -atus', 'to sail', ['to sail', 'to navigate'], 'navigate');
-VD(6, 'paro', 'parāre', 'paro -āre, -avī, -atus', 'to prepare', ['to prepare', 'to get ready', 'to make ready'], 'prepare');
-VD(6, 'teneo', 'tenēre', 'teneo, tenēre, tenuī, tentus', 'to hold', ['to hold', 'to keep', 'to have'], 'tenacious');
-VD(6, 'servo', 'servāre', 'servo, -āre, -avī, -atus', 'to save', ['to save', 'to keep', 'to protect', 'to preserve'], 'preserve');
-VD(6, 'venio', 'venīre', 'venio, venīre, venī, ventus', 'to come', ['to come', 'to arrive'], 'venue = where people come');
+VD(6, 'ceno', 'cenāre', 'ceno, -āre, -avī, -atus', 'to eat dinner', ['to eat dinner', 'to dine', 'to have dinner', 'eat dinner'], { tr: false, en: [E('eats dinner', 'eat dinner', 'eating dinner'), E('dines', 'dine', 'dining'), E('has dinner', 'have dinner', 'having dinner')] });
+VD(6, 'dormio', 'dormīre', 'dormio -īre, -ivī, -itus', 'to sleep', ['to sleep'], { hook: 'dormitory = where you sleep', tr: false, en: [E('sleeps', 'sleep', 'sleeping')] });
+VD(6, 'navigo', 'navigāre', 'navigo -āre, -avī, -atus', 'to sail', ['to sail', 'to navigate'], { hook: 'navigate', tr: false, en: [E('sails', 'sail', 'sailing')] });
+VD(6, 'paro', 'parāre', 'paro -āre, -avī, -atus', 'to prepare', ['to prepare', 'to get ready', 'to make ready'], { hook: 'prepare', tr: 'thing', en: [E('prepares', 'prepare', 'preparing'), E('gets ready', 'get ready', 'getting ready')] });
+VD(6, 'teneo', 'tenēre', 'teneo, tenēre, tenuī, tentus', 'to hold', ['to hold', 'to keep', 'to have'], { hook: 'tenacious', tr: 'thing', en: [E('holds', 'hold', 'holding'), E('keeps', 'keep', 'keeping')] });
+VD(6, 'servo', 'servāre', 'servo, -āre, -avī, -atus', 'to save', ['to save', 'to keep', 'to protect', 'to preserve'], { hook: 'preserve', tr: 'anim', en: [E('saves', 'save', 'saving'), E('protects', 'protect', 'protecting')] });
+VD(6, 'venio', 'venīre', 'venio, venīre, venī, ventus', 'to come', ['to come', 'to arrive'], { hook: 'venue = where people come', tr: false, en: [E('comes', 'come', 'coming'), E('arrives', 'arrive', 'arriving')] });
 X(6, 'heri', 'yesterday', ['yesterday'], null);
 X(6, 'diu', 'for a long time', ['for a long time', 'a long time', 'long'], null);
 X(6, 'furtim', 'stealthily', ['stealthily', 'secretly', 'sneakily', 'quietly'], 'furtive = sneaky');

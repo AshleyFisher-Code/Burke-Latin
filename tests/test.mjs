@@ -346,7 +346,7 @@ for (const cid of ['c1', 'c2']) { const c = g.gChart(cid), want = c.fields.map((
 const V3 = { amo: ['amat', 'amant'], ambulo: ['ambulat', 'ambulant'], audio: ['audit', 'audiunt'], curro: ['currit', 'currunt'], habeo: ['habet', 'habent'], habito: ['habitat', 'habitant'],
   sedeo: ['sedet', 'sedent'], terreo: ['terret', 'terrent'], timeo: ['timet', 'timent'], vexo: ['vexat', 'vexant'], video: ['videt', 'vident'] };
 for (const [id, [sg, pl]] of Object.entries(V3)) { assert(g.v3(W[id], 'sg') === sg && g.v3(W[id], 'pl') === pl, 'verb form ' + id); }
-assert(g.DRILL_VERBS.every(v => v.stage <= 5), 'only Stage 3–5 verbs are drilled so far');
+assert(g.DRILL_VERBS.every(v => v.stage <= 6), 'only Stage 3–6 verbs are drilled so far');
 // generated sentences: check the Latin independently, then the English key
 const P3 = g.pools3(), seen3 = new Set();
 let n3 = 0, cf3 = 0, of3 = 0;
@@ -418,7 +418,7 @@ const CUT = { 1: 3, 2: 3, 3: 3, 4: 3 };
 const six = [[1, 'sg'], [2, 'sg'], [3, 'sg'], [1, 'pl'], [2, 'pl'], [3, 'pl']];
 let n4 = 0;
 const verbs4 = WORDS.filter(w => w.kind === 'vb' && w.en && w.conj !== 'irr');
-assert(verbs4.length === 27 && verbs4.every(v => v.stage <= 5), 'Stage 3–5 verbs drilled: ' + verbs4.length);
+assert(verbs4.length === 34 && verbs4.every(v => v.stage <= 6), 'Stage 3–6 verbs drilled: ' + verbs4.length);
 for (const vb of verbs4) {
   const stem = um(vb.inf).slice(0, -CUT[vb.conj]);
   six.forEach(([p, nm], i) => { const want = i === 0 ? um(vb.lemma) : stem + CHART4[vb.conj][i]; n4++;
@@ -574,6 +574,86 @@ for (let i = 0; i < 30; i++) for (const b of [buildSkill(st, { units: [1, 2, 3, 
   for (const sp of b.specs) { const c = cardFromSpec(sp); for (const id of c.words || []) assert(W[id].stage <= 4 || (W[id].alsoIn || []).some(x => x <= 4), `unticked stage 5 word ${id}`); assert(!['case5', 'decline5'].includes(c.type), 'ablative before Stage 5'); }
 setUnits([1, 2, 3]);
 console.log(`stage 5: forms ${n5}, phrases ${pp5}, sentences ${s5n} (with a phrase ${withPP}), questions ${q5}`);
+/* ---------- Stage 6: the imperfect tense ---------- */
+setUnits([1, 2, 3, 4, 5, 6]);
+// her chart: linking vowel a / e / e / ie, then -bam -bas -bat -bamus -batis -bant (amabam, habebam, dicebam, dormiebam)
+const LV6 = { 1: 'a', 2: 'e', 3: 'e', 4: 'ie' }, BA = ['bam', 'bas', 'bat', 'bamus', 'batis', 'bant'];
+const impfOf = (vb, i) => um(vb.inf).slice(0, -3) + LV6[vb.conj] + BA[i];
+const presOf = (vb, i) => i === 0 ? um(vb.lemma) : um(vb.inf).slice(0, -3) + CHART4[vb.conj][i];
+let n6 = 0;
+const verbs6 = WORDS.filter(w => w.kind === 'vb' && w.en && w.conj !== 'irr');
+assert(verbs6.length === 34, 'Stage 3–6 verbs drilled: ' + verbs6.length);
+for (const vb of verbs6) {
+  six.forEach(([p, nm], i) => { const want = impfOf(vb, i); n6++;
+    assert(g.conjForm(vb, p, nm, 'impf') === want, `impf ${vb.lemma} ${p}${nm}: ${g.conjForm(vb, p, nm, 'impf')} vs ${want}`);
+    assert(g.conjForm(vb, p, nm) === presOf(vb, i) || vb.lemma === 'appereo', 'present still right ' + vb.lemma);
+    // English: past, was/were …ing, used to …
+    const en = g.vEnP(vb, p, nm, false, 'impf'), wasWere = (p + nm === '1sg' || p + nm === '3sg') ? 'was' : 'were';
+    for (const e of vb.en) { if (e.fixed) { assert(en.includes('did not know'), 'nescio impf'); continue; }
+      if (/^is /.test(e.sg)) assert(en.includes(wasWere + ' ' + e.sg.slice(3)), 'be-verb impf ' + vb.lemma);
+      else { assert(e.past && en.includes(e.past) && en.includes('used to ' + e.pl), 'past forms ' + vb.lemma); if (e.ing) assert(en.includes(wasWere + ' ' + e.ing), 'was/were ing ' + vb.lemma); } }
+    // person, number and tense
+    for (const t of ['pres', 'impf']) { const c = g.gPnum(vb.id, p, nm, t);
+      for (const a of ['1st', '2nd', '3rd']) for (const b of ['singular', 'plural']) for (const tt of ['present', 'imperfect']) ok(c, [a, b, tt], a === ['', '1st', '2nd', '3rd'][p] && b === (nm === 'sg' ? 'singular' : 'plural') && tt === (t === 'impf' ? 'imperfect' : 'present'), 'pnum6 ' + c.prompt.latin + ' ' + a + b + tt); }
+    // translate the imperfect form; present English is wrong for it, and the other way round
+    for (const t of ['pres', 'impf']) { const c = g.gVtrans(vb.id, p, nm, t), other = t === 'impf' ? 'pres' : 'impf';
+      for (const pr of g.PRON_EN[p + nm].slice(0, 3)) { for (const ve of g.vEnP(vb, p, nm, false, t)) ok(c, [pr + ' ' + ve], true, 'vtrans6 ' + c.summary + ' ' + pr + ' ' + ve);
+        for (const ve of g.vEnP(vb, p, nm, false, other)) if (!g.vEnP(vb, p, nm, false, t).includes(ve)) ok(c, [pr + ' ' + ve], false, 'vtrans6 wrong tense ' + c.summary + ' ' + pr + ' ' + ve); }
+      for (const [p2, n2] of six) if (p2 !== p || n2 !== nm) ok(c, [g.PRON_EN[p2 + n2][0] + ' ' + g.vEnP(vb, p2, n2, false, t)[0]], false, 'vtrans6 other person ' + c.summary);
+      for (const st of [0, 1, 2]) { const k = g.gVpick(vb.id, p, nm, st, t), want = t === 'impf' ? impfOf(vb, i) : presOf(vb, i);
+        if (vb.lemma === 'appereo' && i === 0 && t === 'pres') continue;
+        assert(k.fields[0].choices.includes(want) && new Set(k.fields[0].choices).size === k.fields[0].choices.length, 'vpick6 choices ' + k.summary);
+        for (const ch of k.fields[0].choices) ok(k, [ch], ch === want, 'vpick6 ' + k.summary + ' ' + ch); }
+      const f = g.gConj(vb.id, 'form', t, p, nm), want = t === 'impf' ? impfOf(vb, i) : g.conjForm(vb, p, nm);
+      assert(f.fields[0].choices.includes(want), 'form choices ' + f.summary); for (const ch of f.fields[0].choices) ok(f, [ch], ch === want, 'form ' + f.summary + ' ' + ch);
+    }
+  });
+  const cj = g.gConj(vb.id, 'all', 'impf'), forms = six.map((_, i) => impfOf(vb, i));
+  ok(cj, forms, true, 'conj impf ' + vb.lemma);
+  cj.fields.forEach((f, i) => { assert(f.choices.includes(forms[i]) && new Set(f.choices).size === f.choices.length, 'conj impf choices ' + vb.lemma);
+    for (const ch of f.choices) if (ch !== forms[i]) { const v = forms.slice(); v[i] = ch; ok(cj, v, false, 'conj impf wrong ' + vb.lemma + ' ' + ch); } });
+}
+for (const cid of ['ie', 'iv']) { const c = g.gChart(cid), want = { ie: ['-bam', '-bas', '-bat', '-bamus', '-batis', '-bant'], iv: ['a', 'e', 'e', 'ie'] }[cid];
+  ok(c, want, true, 'chart ' + cid); c.fields.forEach((f, i) => { for (const ch of f.choices) if (ch !== want[i]) { const v = want.slice(); v[i] = ch; ok(c, v, false, 'chart wrong ' + cid + ' ' + i); } }); }
+// sentences: both tenses, time words, -que, -ne questions
+const P6 = g.pools3(), seen6 = new Set(); let s6n = 0, imp6 = 0, adv6 = 0, que6 = 0, ne6 = 0, q6 = 0;
+for (let i = 0; i < 3000; i++) {
+  const sp = g.randomSpec3(g.pickOne, P6, 0.45), key = JSON.stringify(sp); if (seen6.has(key)) continue; seen6.add(key); s6n++;
+  const st = g.sentence3(sp), c = g.gDobj(sp);
+  assert(!/undefined|null/.test(st.latin + st.correct), 'undefined6: ' + st.latin + ' / ' + st.correct);
+  st.parts.forEach(p => { if (!p.cl.kind3) return; const tc = p.cl, vb = W[tc.v], per = tc.s.length ? 3 : tc.per, i6 = six.findIndex(([a, b]) => a === per && b === p.sNum);
+    const want = (tc.tense || 'pres') === 'impf' ? impfOf(vb, i6) : presOf(vb, i6);
+    assert(p.vf === want || (vb.lemma === 'appereo' && i6 === 0), 'verb form6 ' + st.latin + ' ' + p.vf + ' vs ' + want);
+    if (tc.tense === 'impf') imp6++;
+    if (tc.adv) { adv6++; assert(p.lat[0].replace(/ne$/, '') === tc.adv, 'time word first ' + st.latin); if (tc.adv === 'heri' || tc.adv === 'tum') assert(tc.tense === 'impf', 'heri/tum with imperfect ' + st.latin); if (tc.adv === 'nunc') assert(tc.tense === 'pres', 'nunc with present ' + st.latin); }
+    if (tc.que) { que6++; assert(p.sLat.length === 2 && p.sLat[1].endsWith('que') && !p.sLat.includes('et'), '-que subject ' + st.latin); }
+    if (tc.ne) { ne6++; assert(/ne$/.test(p.lat[0]) && st.latin.endsWith('?') && st.correct.endsWith('?') && !tc.neg, '-ne question ' + st.latin); }
+  });
+  ok(c, [st.correct], true, 'dobj6 key ' + st.latin);
+  ok(c, [st.correct.toLowerCase().replace(/[.,?]/g, '')], true, 'dobj6 lower ' + st.latin);
+  const j = st.join ? ' ' + st.join + ' ' : '';
+  for (const a of st.parts[0].acc.slice(0, 6)) for (const b of (st.parts[1] ? st.parts[1].acc.slice(0, 2) : [''])) ok(c, [(a + j + b).trim()], true, 'dobj6 acc ' + st.latin);
+  st.cons.forEach((con, ci) => { const other = st.parts[1 - ci] ? st.parts[1 - ci].acc[0] : null;
+    for (const bad of [...(con.tense || []).slice(0, 4), ...(con.statement || []).slice(0, 3), ...(con.noAdv || []).slice(0, 2), ...con.swap.slice(0, 2), ...(con.person || []).filter((x, k) => k % 9 === 0).slice(0, 3)]) if (!st.parts[ci].acc.includes(bad))
+      ok(c, [!st.join ? bad : ci === 0 ? bad + j + other : st.parts[0].acc[0] + j + bad], false, 'dobj6 wrong reading ' + st.latin + ' :: ' + bad); });
+  for (const ask of g.caseFnAsks(sp)) { if (!ask.pn) continue; const f = g.gCaseFn(sp, ask), p = st.parts[ask.p]; q6++;
+    assert(f.fields.length === 3, 'tense field from Stage 6');
+    for (const a of ['1st', '2nd', '3rd']) for (const b of ['singular', 'plural']) for (const tt of ['present', 'imperfect']) ok(f, [a, b, tt], a === ['', '1st', '2nd', '3rd'][p.per] && b === (p.sNum === 'sg' ? 'singular' : 'plural') && tt === (p.tense === 'impf' ? 'imperfect' : 'present'), 'pnt ' + st.latin + a + b + tt); }
+  assert(cardFromSpec({ t: 'g', type: 'dobj', params: [sp], skill: 'dobj' }).correct === c.correct, 'rebuild dobj6');
+}
+assert(imp6 > 800 && adv6 > 150 && que6 > 30 && ne6 > 100, `stage 6 mix: imperfect ${imp6}, time words ${adv6}, -que ${que6}, -ne ${ne6}`);
+for (let i = 0; i < 25; i++) {
+  const m = buildMock(st, { units: [1, 2, 3, 4, 5, 6] }, 6), pts = m.specs.reduce((a, x) => a + x.pts, 0); assert(pts === 30, 'stage 6 mock points = ' + pts);
+  const mg = buildMock(st, { units: [1, 2, 3, 4, 5, 6] }, 6, 'grammar'), pg = mg.specs.reduce((a, x) => a + x.pts, 0); assert(pg === 20, 'stage 6 grammar mock points = ' + pg);
+  for (const b of [m, mg, ...['pnum', 'vtrans', 'vpick', 'conj', 'casefn', 'dobj', 'charts'].map(k => buildSkill(st, { units: [1, 2, 3, 4, 5, 6] }, k))])
+    for (const sp of b.specs) { const c = cardFromSpec(JSON.parse(JSON.stringify(sp))); if (c.type === 'l2e' || c.type === 'pick') continue; if (c.fields.every(f => f.choices)) assert(!c.check(c.fields.map(() => '')).ok.every(Boolean), 'blank accepted ' + c.summary); }
+}
+setUnits([1, 2, 3, 4, 5]);
+for (let i = 0; i < 30; i++) for (const b of [buildSkill(st, { units: [1, 2, 3, 4, 5] }, 'dobj'), buildSkill(st, { units: [1, 2, 3, 4, 5] }, 'vtrans'), buildSkill(st, { units: [1, 2, 3, 4, 5] }, 'pnum'), buildMock(st, { units: [1, 2, 3, 4, 5] }, 5)])
+  for (const sp of b.specs) { const c = cardFromSpec(sp); for (const id of c.words || []) assert(W[id].stage <= 5 || (W[id].alsoIn || []).some(x => x <= 5), `unticked stage 6 word ${id}`);
+    assert(!/ba(m|s|t|mus|tis|nt)\b/.test(c.prompt.latin || '') || c.type === 'l2e', 'imperfect before Stage 6: ' + c.prompt.latin); }
+setUnits([1, 2, 3]);
+console.log(`stage 6: forms ${n6}, sentences ${s6n} (imperfect ${imp6}, time words ${adv6}, -que ${que6}, -ne ${ne6}), questions ${q6}`);
 console.log(`two-part sentences ${two}, fix-the-error ${fix2n}`);
 console.log(`checks: ${n}  failures: ${fails.length}  (phrases ${phraseCount}, sentences ${sentCount})`);
 if (fails.length) { console.log(fails.slice(0, 80).join('\n')); process.exit(1); }
