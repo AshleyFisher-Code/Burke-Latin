@@ -203,7 +203,7 @@ for (const [id, a] of spellBad) ok(L2(id), [a, ...sec(W[id])], false, 'spelling-
 for (const w of WORDS) for (const o of WORDS) if (o !== w) for (const m of o.mean) {
   if (w.mean.some(x => normEn(x) === normEn(m))) continue;
   // Same English word, really the same meaning (a noun and its verb, or the Stage 2 form and the Stage 3 dictionary verb)
-  if ([['habito', 'habitat'], ['sedeo', 'sedet'], ['ludo', 'fabula'], ['pono', 'area'], ['coquo', 'coquus'], ['dico', 'inquit']].some(([a, b]) => w.id === a && o.id === b)) continue;
+  if ([['habito', 'habitat'], ['sedeo', 'sedet'], ['ludo', 'fabula'], ['pono', 'area'], ['coquo', 'coquus'], ['dico', 'inquit'], ['scribo', 'scribit'], ['lego', 'legit']].some(([a, b]) => w.id === a && o.id === b)) continue;
   const r = g.vocabL2E(w).check([m, ...sec(w)]); n++; if (r.ok[0]) fails.push(`ACCEPTED ${o.lemma}'s meaning "${m}" for ${w.lemma}`);
 }
 // Misspelled sentences still pass; the wrong number still fails.
@@ -346,7 +346,7 @@ for (const cid of ['c1', 'c2']) { const c = g.gChart(cid), want = c.fields.map((
 const V3 = { amo: ['amat', 'amant'], ambulo: ['ambulat', 'ambulant'], audio: ['audit', 'audiunt'], curro: ['currit', 'currunt'], habeo: ['habet', 'habent'], habito: ['habitat', 'habitant'],
   sedeo: ['sedet', 'sedent'], terreo: ['terret', 'terrent'], timeo: ['timet', 'timent'], vexo: ['vexat', 'vexant'], video: ['videt', 'vident'] };
 for (const [id, [sg, pl]] of Object.entries(V3)) { assert(g.v3(W[id], 'sg') === sg && g.v3(W[id], 'pl') === pl, 'verb form ' + id); }
-assert(g.DRILL_VERBS.every(v => v.stage <= 6), 'only Stage 3–6 verbs are drilled so far');
+assert(g.DRILL_VERBS.every(v => v.stage <= 7), 'only Stage 3–7 verbs are drilled so far');
 // generated sentences: check the Latin independently, then the English key
 const P3 = g.pools3(), seen3 = new Set();
 let n3 = 0, cf3 = 0, of3 = 0;
@@ -418,7 +418,7 @@ const CUT = { 1: 3, 2: 3, 3: 3, 4: 3 };
 const six = [[1, 'sg'], [2, 'sg'], [3, 'sg'], [1, 'pl'], [2, 'pl'], [3, 'pl']];
 let n4 = 0;
 const verbs4 = WORDS.filter(w => w.kind === 'vb' && w.en && w.conj !== 'irr');
-assert(verbs4.length === 34 && verbs4.every(v => v.stage <= 6), 'Stage 3–6 verbs drilled: ' + verbs4.length);
+assert(verbs4.length === 39 && verbs4.every(v => v.stage <= 7), 'Stage 3–7 verbs drilled: ' + verbs4.length);
 for (const vb of verbs4) {
   const stem = um(vb.inf).slice(0, -CUT[vb.conj]);
   six.forEach(([p, nm], i) => { const want = i === 0 ? um(vb.lemma) : stem + CHART4[vb.conj][i]; n4++;
@@ -582,7 +582,7 @@ const impfOf = (vb, i) => um(vb.inf).slice(0, -3) + LV6[vb.conj] + BA[i];
 const presOf = (vb, i) => i === 0 ? um(vb.lemma) : um(vb.inf).slice(0, -3) + CHART4[vb.conj][i];
 let n6 = 0;
 const verbs6 = WORDS.filter(w => w.kind === 'vb' && w.en && w.conj !== 'irr');
-assert(verbs6.length === 34, 'Stage 3–6 verbs drilled: ' + verbs6.length);
+assert(verbs6.length === 39, 'Stage 3–7 verbs drilled: ' + verbs6.length);
 for (const vb of verbs6) {
   six.forEach(([p, nm], i) => { const want = impfOf(vb, i); n6++;
     assert(g.conjForm(vb, p, nm, 'impf') === want, `impf ${vb.lemma} ${p}${nm}: ${g.conjForm(vb, p, nm, 'impf')} vs ${want}`);
@@ -654,6 +654,63 @@ for (let i = 0; i < 30; i++) for (const b of [buildSkill(st, { units: [1, 2, 3, 
     assert(!/ba(m|s|t|mus|tis|nt)\b/.test(c.prompt.latin || '') || c.type === 'l2e', 'imperfect before Stage 6: ' + c.prompt.latin); }
 setUnits([1, 2, 3]);
 console.log(`stage 6: forms ${n6}, sentences ${s6n} (imperfect ${imp6}, time words ${adv6}, -que ${que6}, -ne ${ne6}), questions ${q6}`);
+/* ---------- Stage 7: sum and possum ---------- */
+setUnits([1, 2, 3, 4, 5, 6, 7]);
+// her chart, typed out
+const IRR7 = { sum: { pres: [['sum', 'i am'], ['es', 'you are'], ['est', 'he is'], ['sumus', 'we are'], ['estis', 'you all are'], ['sunt', 'they are']],
+                      impf: [['eram', 'i was'], ['eras', 'you were'], ['erat', 'she was'], ['eramus', 'we were'], ['eratis', 'you all were'], ['erant', 'they were']] },
+  possum: { pres: [['possum', 'i am able'], ['potes', 'you are able'], ['potest', 'he is able'], ['possumus', 'we are able'], ['potestis', 'you all are able'], ['possunt', 'they are able']],
+            impf: [['poteram', 'i was able'], ['poteras', 'you were able'], ['poterat', 'he was able'], ['poteramus', 'we were able'], ['poteratis', 'you all were able'], ['poterant', 'they were able']] } };
+let n7 = 0;
+for (const id of ['sum', 'possum']) for (const t of ['pres', 'impf']) IRR7[id][t].forEach(([lat, en], i) => { const [p, nm] = six[i]; n7++;
+  assert(g.conjForm(W[id], p, nm, t) === lat, `${id} ${t} ${p}${nm}: ${g.conjForm(W[id], p, nm, t)} vs ${lat}`);
+  const c = g.gVtrans(id, p, nm, t); ok(c, [en], true, 'irr translate ' + lat + ' ' + en);
+  if (id === 'possum') ok(c, [en.replace(/ (am|is|are) able$/, ' can').replace(/ (was|were) able$/, ' could')], true, 'can/could ' + lat);
+  for (const [l2, e2] of [...IRR7[id].pres, ...IRR7[id].impf]) if (l2 !== lat && e2.split(' ').slice(1).join(' ') !== en.split(' ').slice(1).join(' ') + 'x') { if (e2.replace(/^(he|she) /, 'it ') !== en.replace(/^(he|she) /, 'it ')) ok(c, [e2], false, 'irr other form ' + lat + ' <- ' + e2); }
+  const pn = g.gPnum(id, p, nm, t); ok(pn, [['', '1st', '2nd', '3rd'][p], nm === 'sg' ? 'singular' : 'plural', t === 'impf' ? 'imperfect' : 'present'], true, 'irr pnum ' + lat);
+  const f = g.gConj(id, 'form', t, p, nm); assert(f.fields[0].choices.includes(lat), 'irr form choices ' + lat); for (const ch of f.fields[0].choices) ok(f, [ch], ch === lat, 'irr form ' + lat + ' ' + ch);
+  const k = g.gVpick(id, p, nm, 0, t); assert(k.fields[0].choices.includes(lat), 'irr vpick ' + lat); for (const ch of k.fields[0].choices) ok(k, [ch], ch === lat, 'irr vpick ' + lat + ' ' + ch);
+});
+for (const id of ['sum', 'possum']) { for (const t of ['pres', 'impf']) { const cj = g.gConj(id, 'all', t), forms = IRR7[id][t].map(x => x[0]); ok(cj, forms, true, 'irr conj ' + id + t);
+    cj.fields.forEach((f, i) => { assert(f.choices.includes(forms[i]), 'irr conj choices'); for (const ch of f.choices) if (ch !== forms[i]) { const v = forms.slice(); v[i] = ch; ok(cj, v, false, 'irr conj wrong ' + id + ' ' + ch); } }); }
+  const w = g.gConj(id, 'which'); for (const ch of w.fields[0].choices) ok(w, [ch], ch === 'irregular', 'which conj ' + id + ' ' + ch); }
+g.IRR_QS.forEach((q, i) => { const c = g.gIrrQ(i); assert(c.fields[0].choices.includes(q[2]), 'irrq has answer'); for (const ch of c.fields[0].choices) ok(c, [ch], ch === q[2], 'irrq ' + q[0] + ' ' + ch); });
+assert(g.IRR_QS[1][2] === 'an infinitive' && g.IRR_QS[3][2] === 'esse' && g.IRR_QS[0][2] === 'intransitive', 'her answers');
+// sentences: sum + complement in every person, possum + infinitive
+const P7 = g.pools3(), seen7 = new Set(); let s7n = 0, sum7 = 0, mod7 = 0;
+for (let i = 0; i < 2500; i++) {
+  const sp = g.randomSpec3(g.pickOne, P7, 0.45), key = JSON.stringify(sp); if (seen7.has(key)) continue; seen7.add(key); s7n++;
+  const st = g.sentence3(sp), c = g.gDobj(sp);
+  assert(!/undefined|null/.test(st.latin + st.correct), 'undefined7: ' + st.latin + ' / ' + st.correct);
+  st.parts.forEach(p => { if (!p.cl.kind3) return; const tc = p.cl, t = tc.tense || 'pres', i6 = six.findIndex(([a, b]) => a === p.per && b === p.sNum);
+    if (tc.k === 'sum') { sum7++; assert(p.vf === IRR7.sum[t][i6][0], 'sum form ' + st.latin);
+      if (tc.a) assert(p.comp === W[tc.a].forms[p.sG][p.sNum], 'complement agrees ' + st.latin); else assert(p.comp === (p.sNum === 'sg' ? W[tc.c].lemma : W[tc.c].pl), 'noun complement ' + st.latin); }
+    if (tc.modal) { mod7++; assert(p.vf === IRR7.possum[t][i6][0] && p.lat.includes(W[tc.v].inf) && p.lat.indexOf(W[tc.v].inf) < p.lat.indexOf(p.vf), 'possum + infinitive ' + st.latin); }
+  });
+  ok(c, [st.correct], true, 'dobj7 key ' + st.latin);
+  ok(c, [st.correct.toLowerCase().replace(/[.,?]/g, '')], true, 'dobj7 lower ' + st.latin);
+  const j = st.join ? ' ' + st.join + ' ' : '';
+  for (const a of st.parts[0].acc.slice(0, 6)) for (const b of (st.parts[1] ? st.parts[1].acc.slice(0, 2) : [''])) ok(c, [(a + j + b).trim()], true, 'dobj7 acc ' + st.latin);
+  st.cons.forEach((con, ci) => { const other = st.parts[1 - ci] ? st.parts[1 - ci].acc[0] : null;
+    for (const bad of [...(con.noModal || []).slice(0, 3), ...(con.tense || []).slice(0, 3), ...con.subjNum.slice(0, 2), ...(con.person || []).filter((x, k) => k % 9 === 0).slice(0, 3)]) if (!st.parts[ci].acc.includes(bad))
+      ok(c, [!st.join ? bad : ci === 0 ? bad + j + other : st.parts[0].acc[0] + j + bad], false, 'dobj7 wrong reading ' + st.latin + ' :: ' + bad); });
+  for (const ask of g.caseFnAsks(sp)) { const p = st.parts[ask.p]; if (!(p.sumPart && ask.role === 'comp')) continue; const f = g.gCaseFn(sp, ask);
+    for (const a of ['nominative', 'accusative', 'ablative']) for (const b of ['subject', 'direct object', 'complement', 'object of a preposition']) ok(f, [a, b], a === 'nominative' && b === 'complement', 'sum complement ' + st.latin + a + b); }
+  assert(cardFromSpec({ t: 'g', type: 'dobj', params: [sp], skill: 'dobj' }).correct === c.correct, 'rebuild dobj7');
+}
+assert(sum7 > 200 && mod7 > 200, `stage 7 mix: sum ${sum7}, possum + infinitive ${mod7}`);
+for (let i = 0; i < 25; i++) {
+  const m = buildMock(st, { units: [1, 2, 3, 4, 5, 6, 7] }, 7), pts = m.specs.reduce((a, x) => a + x.pts, 0); assert(pts === 30, 'stage 7 mock points = ' + pts);
+  const mg = buildMock(st, { units: [1, 2, 3, 4, 5, 6, 7] }, 7, 'grammar'), pg = mg.specs.reduce((a, x) => a + x.pts, 0); assert(pg === 20, 'stage 7 grammar mock points = ' + pg);
+  for (const b of [m, mg, ...['irrq', 'pnum', 'vtrans', 'vpick', 'conj', 'casefn', 'dobj'].map(k => buildSkill(st, { units: [1, 2, 3, 4, 5, 6, 7] }, k))])
+    for (const sp of b.specs) { const c = cardFromSpec(JSON.parse(JSON.stringify(sp))); if (c.type === 'l2e' || c.type === 'pick') continue; if (c.fields.every(f => f.choices)) assert(!c.check(c.fields.map(() => '')).ok.every(Boolean), 'blank accepted ' + c.summary); }
+}
+setUnits([1, 2, 3, 4, 5, 6]);
+for (let i = 0; i < 30; i++) for (const b of [buildSkill(st, { units: [1, 2, 3, 4, 5, 6] }, 'dobj'), buildSkill(st, { units: [1, 2, 3, 4, 5, 6] }, 'conj'), buildMock(st, { units: [1, 2, 3, 4, 5, 6] }, 6)])
+  for (const sp of b.specs) { const c = cardFromSpec(sp); for (const id of c.words || []) assert(W[id].stage <= 6 || (W[id].alsoIn || []).some(x => x <= 6), `unticked stage 7 word ${id}`);
+    if (c.type === 'dobj') for (const part of [sp.params[0].c1, sp.params[0].c2].filter(Boolean)) assert(part.k !== 'sum' && !part.modal, 'sum/possum before Stage 7'); }
+setUnits([1, 2, 3]);
+console.log(`stage 7: forms ${n7}, sentences ${s7n} (sum ${sum7}, possum + infinitive ${mod7})`);
 console.log(`two-part sentences ${two}, fix-the-error ${fix2n}`);
 console.log(`checks: ${n}  failures: ${fails.length}  (phrases ${phraseCount}, sentences ${sentCount})`);
 if (fails.length) { console.log(fails.slice(0, 80).join('\n')); process.exit(1); }

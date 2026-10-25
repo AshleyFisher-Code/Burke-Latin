@@ -1,10 +1,10 @@
 // Builds practice sessions as lists of small, saveable "specs", and turns specs back into cards.
 import { WORDS, W, MAX_STAGE, setUnits, unitsOf, curUnit, isOn, inUnit, stageOn } from './data.js';
-import { vocabL2E, vocabPick, pickOpts, gNID, gChart, gAgree, gPhrase, gFixPhrase, gVnum, gSV, gComp, gRole, gTrans, gFixSent, gTrans2, gFix2, randomSpec2, poolsFor, fix2Errors, gCase, gDecline, gObjForm, gCaseFn, gDobj, caseFnAsks, randomSpec3, pools3, gPnum, gVtrans, gVpick, gConj, gCase5, gDecline5, gAgree5, gPPl2e, gPPe2l, CONJ_VERBS, PERSONS6,
+import { vocabL2E, vocabPick, pickOpts, gNID, gChart, gAgree, gPhrase, gFixPhrase, gVnum, gSV, gComp, gRole, gTrans, gFixSent, gTrans2, gFix2, randomSpec2, poolsFor, fix2Errors, gCase, gDecline, gObjForm, gCaseFn, gDobj, caseFnAsks, randomSpec3, pools3, gPnum, gVtrans, gVpick, gConj, gCase5, gDecline5, gAgree5, gPPl2e, gPPe2l, CONJ_VERBS, PERSONS6, gIrrQ, IRR_QS,
   makeSkillCard, SKILLS, SKILL, CHARTS, shuffle, pickOne, PL_NOUNS, randomSentenceSpec, PHRASE_ADJS, PERSONS, NOUNS, COMP_ADJS } from './gen.js';
 import { wordStatus, skillAcc, quizWords, quizSkills, isMasteryDay, quizCovers } from './srs.js';
 
-const BUILD = { nid: gNID, chart: gChart, agree: gAgree, phrase: gPhrase, fixphrase: gFixPhrase, vnum: gVnum, sv: gSV, comp: gComp, role: gRole, trans: gTrans, fixsent: gFixSent, trans2: gTrans2, fix2: gFix2, case: gCase, decline: gDecline, objform: gObjForm, casefn: gCaseFn, dobj: gDobj, pnum: gPnum, vtrans: gVtrans, vpick: gVpick, conj: gConj, case5: gCase5, decline5: gDecline5, agree5: gAgree5, ppl2e: gPPl2e, ppe2l: gPPe2l };
+const BUILD = { nid: gNID, chart: gChart, agree: gAgree, phrase: gPhrase, fixphrase: gFixPhrase, vnum: gVnum, sv: gSV, comp: gComp, role: gRole, trans: gTrans, fixsent: gFixSent, trans2: gTrans2, fix2: gFix2, case: gCase, decline: gDecline, objform: gObjForm, casefn: gCaseFn, dobj: gDobj, pnum: gPnum, vtrans: gVtrans, vpick: gVpick, conj: gConj, case5: gCase5, decline5: gDecline5, agree5: gAgree5, ppl2e: gPPl2e, ppe2l: gPPe2l, irrq: gIrrQ };
 export function cardFromSpec(sp) {
   let c;
   // He only ever reads Latin and answers in English. Old saved English→Latin cards are shown as Latin→English.
@@ -164,6 +164,20 @@ export function buildMock(state, settings, stage, covers = 'both') {
   const vocab = cur.slice(0, 10 - Math.min(2, misc.length)).concat(misc.slice(0, 2)); // always 10 words (Stage 5's extras are all prepositions)
   const sections = [];
   sections.push({ name: 'I. Vocabulary', pts: 1, specs: shuffle(vocab).map(w => vocabSpec(w.id, 'l2e')) });
+  if (stage >= 7) { // Stage 7 quiz: sum and possum charts, forms, translations, facts, translating
+    sections.push({ name: 'II. Conjugate sum and possum (2 points each)', pts: 2, specs: [gSpec(gConj('sum', 'all', Math.random() < 0.5 ? 'pres' : 'impf')), gSpec(gConj('possum', 'all', Math.random() < 0.5 ? 'pres' : 'impf'))] });
+    const fm = []; for (let i = 0; i < 4; i++) { const [p, n] = pickOne(PERSONS6); fm.push(gSpec(gConj(i % 2 ? 'sum' : 'possum', 'form', i < 2 ? 'impf' : 'pres', p, n))); }
+    sections.push({ name: 'III. Produce the requested form', pts: 1, specs: fm });
+    const vt = []; for (let i = 0; i < 4; i++) { const [p, n] = pickOne(PERSONS6); vt.push(gSpec(gVtrans(i % 2 ? 'sum' : 'possum', p, n, i < 2 ? 'impf' : 'pres'))); }
+    sections.push({ name: 'IV. Translate the verbs', pts: 1, specs: vt });
+    const qi = shuffle([0, 1, 2, 3, 4, 5]).slice(0, 2);
+    sections.push({ name: 'V. Questions about sum and possum', pts: 1, specs: qi.map(i => gSpec(gIrrQ(i))) });
+    const P = pools3(), tr = []; for (let i = 0; i < 3; i++) tr.push(gSpec(gDobj(randomSpec3(pick, P, 0.6))));
+    sections.push({ name: 'VI. Translating (2 points each)', pts: 2, specs: tr });
+    if (covers === 'grammar') sections.shift();
+    const specs = []; sections.forEach((s, si) => s.specs.forEach(sp => specs.push({ ...sp, sec: si, pts: s.pts })));
+    return { mode: 'mock', kind: covers, title: covers === 'grammar' ? `Grammar mock quiz · Stage ${stage}` : `Mock quiz · Stage ${stage}`, test: true, stage, sections: sections.map(s => ({ name: s.name })), specs };
+  }
   if (stage >= 6) { // Stage 6 quiz: present vs imperfect: translate verbs, person/number/tense, produce the form, conjugate, translating
     const vt = []; for (let i = 0; i < 5; i++) vt.push(gSpec(makeSkillCard('vtrans', pick, stage)));
     sections.push({ name: 'II. Translate the verbs', pts: 1, specs: vt });

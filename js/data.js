@@ -51,7 +51,7 @@ const conjOf = inf => { const t = inf.normalize('NFD').replace(/[\u0300-\u036f]/
 const VD = (stage, lemma, inf, entry, show, mean, x = {}) => {
   if (x == null || typeof x === 'string') x = { hook: x || null };
   WORDS.push({ id: letters(lemma), stage, lemma, kind: 'vb', inf, conj: conjOf(inf), show, mean, hook: x.hook || null, entry,
-    tr: x.tr ?? null, en: x.en || null, noNeg: !!x.noNeg, infChoices: x.infChoices || null });
+    tr: x.tr ?? null, en: x.en || null, noNeg: !!x.noNeg, objs: x.objs || null, infChoices: x.infChoices || null });
 };
 // Preposition: meaning + which case it takes (tapped).
 const P = (stage, lemma, takes, show, mean, x = {}) => {
@@ -142,6 +142,7 @@ const PAST = { love: 'loved', like: 'liked', walk: 'walked', hear: 'heard', 'lis
   appear: 'appeared', 'show up': 'showed up', fall: 'fell', 'fall down': 'fell down', shout: 'shouted', yell: 'yelled', teach: 'taught', hurry: 'hurried', rush: 'rushed',
   laugh: 'laughed', smile: 'smiled', call: 'called', summon: 'summoned', praise: 'praised', work: 'worked', remain: 'remained', stay: 'stayed', speak: 'spoke', say: 'said',
   talk: 'talked', know: 'knew', stand: 'stood', think: 'thought', 'eat dinner': 'ate dinner', dine: 'dined', 'have dinner': 'had dinner', sleep: 'slept', sail: 'sailed',
+  play: 'played', tell: 'told', narrate: 'narrated', carry: 'carried', bring: 'brought', fight: 'fought', write: 'wrote',
   prepare: 'prepared', 'get ready': 'got ready', hold: 'held', keep: 'kept', save: 'saved', protect: 'protected', come: 'came', arrive: 'arrived' };
 const E = (sg, pl, ing) => ({ sg, pl, ing, past: PAST[pl] || null });
 VD(3, 'amo', 'amāre', 'amo, amāre', 'to love', ['to love', 'to like'], { tr: 'any', en: [E('loves', 'love', 'loving'), E('likes', 'like', 'liking')] });
@@ -261,13 +262,13 @@ A(7, 'primus', 'first', ['first'], 'primary');
 A(7, 'secundus', 'second', ['second'], null);
 A(7, 'tertius', 'third', ['third'], null);
 X(7, 'accidit', 'it happens', ['it happens', 'happens', 'it happened'], 'accident = something that happens');
-VD(7, 'ludo', 'ludere', 'ludo, ludere, lusī, lusus', 'to play', ['to play'], 'ludicrous');
-VD(7, 'narro', 'narrāre', 'narro, -āre, -avī, -atus', 'to tell (a story)', ['to tell', 'to tell a story', 'to narrate', 'to tell (a story)'], 'narrate');
-VD(7, 'porto', 'portāre', 'porto -āre, -avī, -atus', 'to carry', ['to carry', 'to bring'], 'portable');
+VD(7, 'ludo', 'ludere', 'ludo, ludere, lusī, lusus', 'to play', ['to play'], { hook: 'ludicrous', tr: false, en: [E('plays', 'play', 'playing')] });
+VD(7, 'narro', 'narrāre', 'narro, -āre, -avī, -atus', 'to tell (a story)', ['to tell', 'to tell a story', 'to narrate', 'to tell (a story)'], { hook: 'narrate', tr: 'thing', en: [E('tells', 'tell', 'telling'), E('narrates', 'narrate', 'narrating')], objs: ['fabula', 'iocus'] });
+VD(7, 'porto', 'portāre', 'porto -āre, -avī, -atus', 'to carry', ['to carry', 'to bring'], { hook: 'portable', tr: 'thing', en: [E('carries', 'carry', 'carrying'), E('brings', 'bring', 'bringing')], objs: ['cena', 'cibus', 'pecunia', 'aqua', 'ramus', 'tunica', 'epistula', 'copia'] });
 VD(7, 'possum', 'posse', 'possum, posse, potui, X', 'to be able', ['to be able', 'can', 'to be able to', 'able'], { hook: 'possible', infChoices: ['posse', 'possumāre', 'possumere', 'potēre'] });
-VD(7, 'pugno', 'pugnāre', 'pugno -āre, -avī, -atus', 'to fight', ['to fight'], 'pugnacious = likes to fight');
+VD(7, 'pugno', 'pugnāre', 'pugno -āre, -avī, -atus', 'to fight', ['to fight'], { hook: 'pugnacious = likes to fight', tr: false, en: [E('fights', 'fight', 'fighting')] });
 X(7, 'necesse est', 'it is necessary', ['it is necessary', 'necessary', 'it is needed', 'it is essential'], null);
-VD(7, 'scribo', 'scribere', 'scribo, scribere, scripsi, scriptus', 'to write', ['to write'], 'scribble');
+VD(7, 'scribo', 'scribere', 'scribo, scribere, scripsi, scriptus', 'to write', ['to write'], { hook: 'scribble', tr: 'thing', en: [E('writes', 'write', 'writing')], objs: ['fabula', 'epistula'] });
 VD(7, 'sum', 'esse', 'sum, esse, fui, futurus', 'to be', ['to be', 'be', 'i am', 'am'], { infChoices: ['esse', 'sumāre', 'sumere', 'sumēre'] });
 X(7, 'igitur', 'therefore', ['therefore', 'so', 'thus'], null);
 X(7, 'lente', 'slowly', ['slowly'], 'lento = slow in music');
