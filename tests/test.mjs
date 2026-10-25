@@ -203,7 +203,7 @@ for (const [id, a] of spellBad) ok(L2(id), [a, ...sec(W[id])], false, 'spelling-
 for (const w of WORDS) for (const o of WORDS) if (o !== w) for (const m of o.mean) {
   if (w.mean.some(x => normEn(x) === normEn(m))) continue;
   // Same English word, really the same meaning (a noun and its verb, or the Stage 2 form and the Stage 3 dictionary verb)
-  if ([['habito', 'habitat'], ['sedeo', 'sedet'], ['ludo', 'fabula'], ['pono', 'area'], ['coquo', 'coquus']].some(([a, b]) => w.id === a && o.id === b)) continue;
+  if ([['habito', 'habitat'], ['sedeo', 'sedet'], ['ludo', 'fabula'], ['pono', 'area'], ['coquo', 'coquus'], ['dico', 'inquit']].some(([a, b]) => w.id === a && o.id === b)) continue;
   const r = g.vocabL2E(w).check([m, ...sec(w)]); n++; if (r.ok[0]) fails.push(`ACCEPTED ${o.lemma}'s meaning "${m}" for ${w.lemma}`);
 }
 // Misspelled sentences still pass; the wrong number still fails.
@@ -346,7 +346,7 @@ for (const cid of ['c1', 'c2']) { const c = g.gChart(cid), want = c.fields.map((
 const V3 = { amo: ['amat', 'amant'], ambulo: ['ambulat', 'ambulant'], audio: ['audit', 'audiunt'], curro: ['currit', 'currunt'], habeo: ['habet', 'habent'], habito: ['habitat', 'habitant'],
   sedeo: ['sedet', 'sedent'], terreo: ['terret', 'terrent'], timeo: ['timet', 'timent'], vexo: ['vexat', 'vexant'], video: ['videt', 'vident'] };
 for (const [id, [sg, pl]] of Object.entries(V3)) { assert(g.v3(W[id], 'sg') === sg && g.v3(W[id], 'pl') === pl, 'verb form ' + id); }
-assert(g.DRILL_VERBS.every(v => v.stage <= 4), 'only Stage 3–4 verbs are drilled so far');
+assert(g.DRILL_VERBS.every(v => v.stage <= 5), 'only Stage 3–5 verbs are drilled so far');
 // generated sentences: check the Latin independently, then the English key
 const P3 = g.pools3(), seen3 = new Set();
 let n3 = 0, cf3 = 0, of3 = 0;
@@ -418,7 +418,7 @@ const CUT = { 1: 3, 2: 3, 3: 3, 4: 3 };
 const six = [[1, 'sg'], [2, 'sg'], [3, 'sg'], [1, 'pl'], [2, 'pl'], [3, 'pl']];
 let n4 = 0;
 const verbs4 = WORDS.filter(w => w.kind === 'vb' && w.en && w.conj !== 'irr');
-assert(verbs4.length === 19 && verbs4.every(v => v.stage <= 4), 'Stage 3 + 4 verbs drilled: ' + verbs4.length);
+assert(verbs4.length === 27 && verbs4.every(v => v.stage <= 5), 'Stage 3–5 verbs drilled: ' + verbs4.length);
 for (const vb of verbs4) {
   const stem = um(vb.inf).slice(0, -CUT[vb.conj]);
   six.forEach(([p, nm], i) => { const want = i === 0 ? um(vb.lemma) : stem + CHART4[vb.conj][i]; n4++;
@@ -494,6 +494,86 @@ for (let i = 0; i < 40; i++) for (const b of [buildDaily(st, { units: [1, 2, 3] 
     if (c.type === 'dobj') for (const part of [sp.params[0].c1, sp.params[0].c2].filter(Boolean)) assert(part.kind === 'lv' || part.s.length, 'hidden subject before Stage 4'); }
 setUnits([1, 2, 3]);
 console.log(`stage 4: verb forms ${n4}, sentences ${s4n} (hidden ${hid4}, ego/tu/nos/vos ${pro4}, eum/eam ${opro4}), questions ${q4}`);
+/* ---------- Stage 5: prepositions & the ablative ---------- */
+setUnits([1, 2, 3, 4, 5]);
+// her chart: 1st -ā / -īs, 2nd -ō / -īs
+const ablOf = (w, num) => w.gen === 'ae' ? w.lemma.slice(0, -1) + (num === 'sg' ? 'ā' : 'īs') : w.pl.slice(0, -1) + (num === 'sg' ? 'ō' : 'īs');
+const formOf5 = (w, num, cas) => cas === 'nom' ? nomOf(w, num) : cas === 'acc' ? accOf(w, num) : ablOf(w, num);
+let n5 = 0;
+const nouns5 = g.NOUNS.filter(x => x.pl), adjs5 = g.ADJS.filter(a => a.phrase && !['alter'].includes(a.id));
+for (const w of nouns5) for (const num of ['sg', 'pl']) for (const cas of ['nom', 'acc', 'abl']) {
+  if (cas === 'abl') assert(w.abl[num] === ablOf(w, num), 'abl form ' + w.lemma + ' ' + num + ' ' + w.abl[num]);
+  const c = g.gCase5(w.id, num, cas); n5++;
+  const right = [{ nom: 'nominative', acc: 'accusative', abl: 'ablative' }[cas], num === 'sg' ? 'singular' : 'plural', w.g === 'f' ? 'feminine' : 'masculine'];
+  for (const a of ['nominative', 'accusative', 'ablative']) for (const b of ['singular', 'plural']) for (const gg of ['masculine', 'feminine']) ok(c, [a, b, gg], a === right[0] && b === right[1] && gg === right[2], 'case5 ' + c.prompt.latin + ' ' + a + ' ' + b + ' ' + gg);
+  const d = g.gDecline5(w.id, num, cas), want = formOf5(w, num, cas);
+  assert(d.fields[0].choices.includes(want) && new Set(d.fields[0].choices).size === d.fields[0].choices.length, 'decline5 choices ' + w.lemma);
+  for (const ch of d.fields[0].choices) ok(d, [ch], ch === want, 'decline5 ' + w.lemma + ' ' + cas + ' ' + num + ' ' + ch);
+  // make the adjective agree: independent ending from the noun's real gender (nautā → ignavō)
+  for (const a of adjs5) { const f = g.gAgree5(w.id, num, cas, a.id), st2 = a.forms.f.sg.slice(0, -1);
+    const wantA = st2 + { m: { nom: { sg: a.lemma.slice(st2.length), pl: 'ī' }, acc: { sg: 'um', pl: 'os' }, abl: { sg: 'ō', pl: 'īs' } }, f: { nom: { sg: 'a', pl: 'ae' }, acc: { sg: 'am', pl: 'as' }, abl: { sg: 'ā', pl: 'īs' } } }[w.g][cas][num];
+    assert(f.fields[0].choices.includes(wantA) && new Set(f.fields[0].choices).size === f.fields[0].choices.length, 'agree5 choices ' + f.summary + ' ' + wantA);
+    for (const ch of f.fields[0].choices) ok(f, [ch], ch === wantA, 'agree5 ' + f.summary + ' ' + ch); }
+}
+for (const cid of ['a1', 'a2']) { const c = g.gChart(cid), want = { a1: ['-a', '-ae', '-am', '-as', '-ā', '-īs'], a2: ['-us / -r', '-ī', '-um', '-os', '-ō', '-īs'] }[cid];
+  ok(c, want, true, 'chart ' + cid); c.fields.forEach((f, i) => { for (const ch of f.choices) if (ch !== want[i]) { const v = want.slice(); v[i] = ch; ok(c, v, false, 'chart wrong ' + cid + ' ' + i); } }); }
+// every preposition with every noun: the case it takes, e/ex and a/ab, English both ways
+const TAKES = { aab: 'abl', ad: 'acc', circum: 'acc', cum: 'abl', de: 'abl', eex: 'abl', inabl: 'abl', inacc: 'acc', pro: 'abl', prope: 'acc', sine: 'abl', trans: 'acc' };
+const PEN = { aab: 'away from', ad: 'to', circum: 'around', cum: 'with', de: 'about', eex: 'out of', inabl: 'in', inacc: 'into', pro: 'for', prope: 'near', sine: 'without', trans: 'across' };
+let pp5 = 0;
+for (const [pid, cas] of Object.entries(TAKES)) { assert(W[pid].takes === { abl: 'ablative', acc: 'accusative' }[cas], 'takes ' + pid);
+  for (const w of nouns5) for (const num of ['sg', 'pl']) for (const a of [null, adjs5[(w.id.length + pp5) % adjs5.length]]) { if (a && !g.fits(w, a)) continue;
+    const pp = { p: pid, n: w.id, num, a: a ? a.id : null }, ph = g.ppPhrase(pp), nf = formOf5(w, num, cas); pp5++;
+    const lat0 = pid === 'eex' ? (/^[aeiou]/.test(nf) ? 'ex' : 'e') : pid === 'aab' ? (/^[aeiou]/.test(nf) ? 'ab' : 'a') : pid.startsWith('in') ? 'in' : pid;
+    assert(ph.lat[0] === lat0 && ph.lat[1] === nf, `pp Latin ${ph.lat.join(' ')} vs ${lat0} ${nf}`);
+    const c = g.gPPl2e(pp), npEn = (a ? a.mean[0] + ' ' : '') + (num === 'sg' ? w.mean[0] : w.enPl[0]);
+    ok(c, [`${PEN[pid]} the ${npEn}`], true, 'ppl2e ' + c.summary); ok(c, [c.correct.split(' = ')[1]], true, 'ppl2e key ' + c.summary);
+    if (w.enPl.length && num === 'sg' && !(w.mean.some(m => w.enPl.includes(m)))) ok(c, [`${PEN[pid]} the ${(a ? a.mean[0] + ' ' : '')}${w.enPl[0]}`], false, 'ppl2e number ' + c.summary);
+    if (pid === 'inabl') ok(c, [`into the ${npEn}`], false, 'in+abl is not into ' + c.summary);
+    if (pid === 'inacc') ok(c, [`in the ${npEn}`], false, 'in+acc is not in ' + c.summary);
+    const e = g.gPPe2l(pp), good = ph.lat.join(' ');
+    assert(e.fields[0].choices.includes(good) && new Set(e.fields[0].choices).size === e.fields[0].choices.length && e.fields[0].choices.length >= 3, 'ppe2l choices ' + e.summary);
+    for (const ch of e.fields[0].choices) ok(e, [ch], ch === good, 'ppe2l ' + e.summary + ' ' + ch);
+  } }
+// sentences with prepositional phrases
+const P5 = g.pools3(), seen5 = new Set(); let s5n = 0, withPP = 0, q5 = 0;
+for (let i = 0; i < 3500; i++) {
+  const sp = g.randomSpec3(g.pickOne, P5, 0.45), key = JSON.stringify(sp); if (seen5.has(key)) continue; seen5.add(key); s5n++;
+  const st = g.sentence3(sp), c = g.gDobj(sp);
+  assert(!/undefined|null/.test(st.latin + st.correct), 'undefined5: ' + st.latin + ' / ' + st.correct);
+  st.parts.forEach(p => { if (!p.cl.kind3 || !p.cl.pp) return; withPP++; const q = p.cl.pp, w = W[q.n], nf = formOf5(w, q.num, TAKES[q.p]);
+    assert(p.lat.includes(nf) && p.pp.nf === nf, 'pp noun case ' + st.latin);
+    if (['cum', 'sine', 'pro'].includes(q.p)) assert(w.person && (!p.cl.s.length || p.cl.s.every(id => W[id].person)), 'cum/sine/pro with people ' + st.latin);
+    if (q.a) { const a = W[q.a]; assert(p.pp.af === a[TAKES[q.p] === 'abl' ? 'abl' : 'acc'][w.g][q.num], 'pp adjective agrees ' + st.latin); } });
+  ok(c, [st.correct], true, 'dobj5 key ' + st.latin);
+  ok(c, [st.correct.toLowerCase().replace(/[.,]/g, '')], true, 'dobj5 lower ' + st.latin);
+  const j = st.join ? ' ' + st.join + ' ' : '';
+  for (const a of st.parts[0].acc.slice(0, 6)) for (const b of (st.parts[1] ? st.parts[1].acc.slice(0, 2) : [''])) ok(c, [(a + j + b).trim()], true, 'dobj5 acc ' + st.latin);
+  st.cons.forEach((con, ci) => { const other = st.parts[1 - ci] ? st.parts[1 - ci].acc[0] : null;
+    for (const bad of [...(con.ppNum || []).slice(0, 3), ...(con.ppCase || []).slice(0, 3), ...(con.noPP || []).slice(0, 2), ...con.swap.slice(0, 2), ...con.objNum.slice(0, 2)]) if (!st.parts[ci].acc.includes(bad))
+      ok(c, [!st.join ? bad : ci === 0 ? bad + j + other : st.parts[0].acc[0] + j + bad], false, 'dobj5 wrong reading ' + st.latin + ' :: ' + bad); });
+  for (const ask of g.caseFnAsks(sp)) { const f = g.gCaseFn(sp, ask); q5++;
+    const p = st.parts[ask.p];
+    if (ask.ppq) { const want = p.pp.lat.join(' '); for (const ch of f.fields[0].choices) ok(f, [ch], ch === want, 'ppq ' + st.latin + ' ' + ch); }
+    else if (ask.trq) { const want = p.cl.k === 'tr' ? 'transitive' : 'intransitive'; for (const ch of ['transitive', 'intransitive']) ok(f, [ch], ch === want, 'trq ' + st.latin + ' ' + ch); }
+    else if (ask.subjof || ask.pn || ask.modify) { const want = f.correct.split(': ').pop().split(' modifies ').pop(); if (ask.modify) { const w2 = p.lat[ask.n]; for (const ch of f.fields[0].choices) ok(f, [ch], ch === w2, 'modify5 ' + st.latin + ' ' + ch); } }
+    else { const right = [ask.role === 'obj' ? 'accusative' : ask.role === 'pobj' ? (TAKES[p.cl.pp.p] === 'abl' ? 'ablative' : 'accusative') : 'nominative', { subj: 'subject', obj: 'direct object', comp: 'complement', pobj: 'object of a preposition' }[ask.role]];
+      if (ask.role === 'pobj') assert(p.lat[ask.w] === p.pp.nf, 'pobj word');
+      for (const a of ['nominative', 'accusative', 'ablative']) for (const b of ['subject', 'direct object', 'complement', 'object of a preposition']) ok(f, [a, b], a === right[0] && b === right[1], 'casefn5 ' + st.latin + ' ' + p.lat[ask.w] + ' ' + a + ' ' + b); }
+  }
+}
+assert(withPP > 1000, 'stage 5 sentences with prepositional phrases: ' + withPP);
+for (let i = 0; i < 25; i++) {
+  const m = buildMock(st, { units: [1, 2, 3, 4, 5] }, 5), pts = m.specs.reduce((a, x) => a + x.pts, 0); assert(pts === 30, 'stage 5 mock points = ' + pts);
+  const mg = buildMock(st, { units: [1, 2, 3, 4, 5] }, 5, 'grammar'), pg = mg.specs.reduce((a, x) => a + x.pts, 0); assert(pg === 20, 'stage 5 grammar mock points = ' + pg);
+  for (const b of [m, mg, ...['case', 'agree5', 'ppl2e', 'ppe2l', 'casefn', 'dobj', 'charts'].map(k => buildSkill(st, { units: [1, 2, 3, 4, 5] }, k))])
+    for (const sp of b.specs) { const c = cardFromSpec(JSON.parse(JSON.stringify(sp))); if (c.type === 'l2e' || c.type === 'pick') continue; if (c.fields.every(f => f.choices)) assert(!c.check(c.fields.map(() => '')).ok.every(Boolean), 'blank accepted ' + c.summary); }
+}
+setUnits([1, 2, 3, 4]);
+for (let i = 0; i < 30; i++) for (const b of [buildSkill(st, { units: [1, 2, 3, 4] }, 'dobj'), buildSkill(st, { units: [1, 2, 3, 4] }, 'case'), buildMock(st, { units: [1, 2, 3, 4] }, 4)])
+  for (const sp of b.specs) { const c = cardFromSpec(sp); for (const id of c.words || []) assert(W[id].stage <= 4 || (W[id].alsoIn || []).some(x => x <= 4), `unticked stage 5 word ${id}`); assert(!['case5', 'decline5'].includes(c.type), 'ablative before Stage 5'); }
+setUnits([1, 2, 3]);
+console.log(`stage 5: forms ${n5}, phrases ${pp5}, sentences ${s5n} (with a phrase ${withPP}), questions ${q5}`);
 console.log(`two-part sentences ${two}, fix-the-error ${fix2n}`);
 console.log(`checks: ${n}  failures: ${fails.length}  (phrases ${phraseCount}, sentences ${sentCount})`);
 if (fails.length) { console.log(fails.slice(0, 80).join('\n')); process.exit(1); }

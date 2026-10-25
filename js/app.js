@@ -223,7 +223,7 @@ function renderRun() {
     h('section', { class: 'card' },
       h('div', { class: 'row' }, h('span', { class: 'chip' + (sp.follow ? ' back' : ''), text: chipText }), c.stage ? h('span', { class: 'eyebrow', text: `Stage ${c.stage}` }) : null),
       c.instr ? h('p', { class: 'instr', text: c.instr }) : null, promptEl,
-      h('div', { class: 'fields' + (c.fields.length === 3 ? ' three' : c.fields.length === 2 ? ' two' : '') }, c.fields.map((f, i) => h(f.choices ? 'div' : 'label', { class: 'f' }, f.label, inputs[i]))),
+      h('div', { class: 'fields' + (c.fields.length === 3 && c.fields.every(f => f.choices && f.choices.length <= 2) ? ' three' : c.fields.length === 2 ? ' two' : '') }, c.fields.map((f, i) => h(f.choices ? 'div' : 'label', { class: 'f' }, f.label, inputs[i]))),
       fb, h('div', { class: 'actions' }, btn)));
   const goFn = () => {
     if (Date.now() - lastSubmit < 250) return;

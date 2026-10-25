@@ -18,7 +18,8 @@ const N = (stage, lemma, gen, g, show, mean, hook, x = {}) => {
   const pl = x.pl !== undefined ? x.pl : (gen === 'ae' ? lemma.slice(0, -1) + 'ae' : (lemma.endsWith('us') ? lemma.slice(0, -2) : lemma) + 'ī');
   const accStem = gen === 'ae' ? lemma.slice(0, -1) : (pl ? pl.slice(0, -1) : (lemma.endsWith('us') ? lemma.slice(0, -2) : lemma));
   const acc = gen === 'ae' ? { sg: accStem + 'am', pl: accStem + 'as' } : { sg: accStem + 'um', pl: accStem + 'os' };
-  WORDS.push({ id: letters(lemma), stage, lemma, kind: 'n', gen, g, show, mean, hook: hook || null, pl, acc,
+  const abl = gen === 'ae' ? { sg: accStem + 'ā', pl: accStem + 'īs' } : { sg: accStem + 'ō', pl: accStem + 'īs' };
+  WORDS.push({ id: letters(lemma), stage, lemma, kind: 'n', gen, g, show, mean, hook: hook || null, pl, acc, abl,
     enPl: x.noPlural ? [] : (x.enPl || mean.map(enPlural)), person: !!x.person, animal: !!x.animal, abstract: !!x.abstract, trap: !!x.trap,
     entry: x.entry || `${lemma} -${gen === 'i' ? 'ī' : 'ae'} ${g}` });
 };
@@ -26,8 +27,9 @@ const A = (stage, lemma, show, mean, hook, x = {}) => {
   const stem = x.stem || (lemma === 'alter' ? 'alter' : lemma.slice(0, -2));
   const forms = { m: { sg: lemma, pl: stem + 'ī' }, f: { sg: stem + 'a', pl: stem + 'ae' } };
   const acc = { m: { sg: stem + 'um', pl: stem + 'os' }, f: { sg: stem + 'am', pl: stem + 'as' } };
+  const abl = { m: { sg: stem + 'ō', pl: stem + 'īs' }, f: { sg: stem + 'ā', pl: stem + 'īs' } };
   WORDS.push({ id: letters(lemma), stage, lemma, kind: 'a', show, mean, hook: hook || null, rest: x.rest || null, near: x.near || null, restOk: x.restOk || null,
-    forms, acc, phrase: x.phrase !== false, grammar: x.grammar !== false, entry: x.entry || (x.rest ? `${lemma}, ${x.rest}` : `${lemma} -a -um`) });
+    forms, acc, abl, phrase: x.phrase !== false, grammar: x.grammar !== false, entry: x.entry || (x.rest ? `${lemma}, ${x.rest}` : `${lemma} -a -um`) });
 };
 const V = (stage, lemma, pair, num, show, mean, base, prog, wrongNum, hook) => {
   WORDS.push({ id: letters(lemma), stage, lemma, kind: 'v', pair, num, show, mean, base, prog, wrongNum, hook: hook || null,
@@ -49,7 +51,7 @@ const conjOf = inf => { const t = inf.normalize('NFD').replace(/[\u0300-\u036f]/
 const VD = (stage, lemma, inf, entry, show, mean, x = {}) => {
   if (x == null || typeof x === 'string') x = { hook: x || null };
   WORDS.push({ id: letters(lemma), stage, lemma, kind: 'vb', inf, conj: conjOf(inf), show, mean, hook: x.hook || null, entry,
-    tr: x.tr ?? null, en: x.en || null, infChoices: x.infChoices || null });
+    tr: x.tr ?? null, en: x.en || null, noNeg: !!x.noNeg, infChoices: x.infChoices || null });
 };
 // Preposition: meaning + which case it takes (tapped).
 const P = (stage, lemma, takes, show, mean, x = {}) => {
@@ -192,14 +194,14 @@ N(5, 'fossa', 'ae', 'f', 'ditch', ['ditch', 'trench'], null);
 N(5, 'insula', 'ae', 'f', 'island', ['island', 'apartment building'], 'insulate = make an island', {});
 N(5, 'regina', 'ae', 'f', 'queen', ['queen'], 'regal = royal', { person: true });
 N(5, 'terra', 'ae', 'f', 'land/ground', ['land', 'ground', 'earth'], 'terrain', {});
-VD(5, 'cogito', 'cogitāre', 'cogito, cogitāre, cogitavī, cogitatus (or -āre, -avī, -atus)', 'to think', ['to think', 'to consider'], {});
-VD(5, 'laudo', 'laudāre', 'laudo, -āre, -avī, -atus', 'to praise', ['to praise'], 'applaud');
-VD(5, 'laboro', 'laborāre', 'laboro, -āre, -avī, -atus', 'to work', ['to work'], 'labor = work');
-VD(5, 'maneo', 'manēre', 'maneo, manēre, mansi, mansurus', 'to remain', ['to remain', 'to stay'], {});
-VD(5, 'nescio', 'nescīre', 'nescio, nescīre, nescivī, nescitus (or -īre, -ivī, -itus)', 'to not know', ['to not know', 'not to know', "to not know", "don't know"], {});
-VD(5, 'dico', 'dicere', 'dico, dicere, dixi, dictus', 'to speak/ say', ['to speak', 'to say', 'to tell'], 'dictate');
-VD(5, 'scio', 'scīre', 'scio, -īre, -ivī, -itus', 'to know', ['to know'], 'science = knowing');
-VD(5, 'sto', 'stāre', 'sto, stāre, steti, status', 'to stand', ['to stand'], 'statue = something standing');
+VD(5, 'cogito', 'cogitāre', 'cogito, cogitāre, cogitavī, cogitatus (or -āre, -avī, -atus)', 'to think', ['to think', 'to consider'], { tr: false, en: [E('thinks', 'think', 'thinking')] });
+VD(5, 'laudo', 'laudāre', 'laudo, -āre, -avī, -atus', 'to praise', ['to praise'], { hook: 'applaud', tr: 'anim', en: [E('praises', 'praise', 'praising')] });
+VD(5, 'laboro', 'laborāre', 'laboro, -āre, -avī, -atus', 'to work', ['to work'], { hook: 'labor = work', tr: false, en: [E('works', 'work', 'working')] });
+VD(5, 'maneo', 'manēre', 'maneo, manēre, mansi, mansurus', 'to remain', ['to remain', 'to stay'], { tr: false, en: [E('remains', 'remain', 'remaining'), E('stays', 'stay', 'staying')] });
+VD(5, 'nescio', 'nescīre', 'nescio, nescīre, nescivī, nescitus (or -īre, -ivī, -itus)', 'to not know', ['to not know', 'not to know', "to not know", "don't know"], { tr: 'any', noNeg: true, en: [{ sg: 'does not know', pl: 'do not know', ing: null, fixed: true }] });
+VD(5, 'dico', 'dicere', 'dico, dicere, dixi, dictus', 'to speak/ say', ['to speak', 'to say', 'to tell'], { hook: 'dictate', tr: false, en: [E('speaks', 'speak', 'speaking'), E('says', 'say', 'saying'), E('talks', 'talk', 'talking')] });
+VD(5, 'scio', 'scīre', 'scio, -īre, -ivī, -itus', 'to know', ['to know'], { hook: 'science = knowing', tr: 'any', en: [E('knows', 'know', null)] });
+VD(5, 'sto', 'stāre', 'sto, stāre, steti, status', 'to stand', ['to stand'], { hook: 'statue = something standing', tr: false, en: [E('stands', 'stand', 'standing')] });
 P(5, 'a/ab', 'ablative', 'away from (+ablative)', ['away from', 'from', 'by'], { forms: ['a', 'ab'] });
 P(5, 'ad', 'accusative', 'to/towards/at (+accusative)', ['to', 'towards', 'toward', 'at']);
 P(5, 'circum', 'accusative', 'around (+accusative)', ['around'], { hook: 'circumference' });
