@@ -243,8 +243,10 @@ function choiceGroup(f, i, onPick) {
   let sel = '', ro = false;
   const long = f.choices.some(x => x.length > 14);
   // 4 medium-length choices (currere, lupos…) sit in a 2×2 grid so words never break mid-word
-  const grid = !long && (f.choices.length >= 4 ? f.choices.some(x => x.length > 5) : f.choices.length === 3 && f.choices.some(x => x.length > 8));
-  const box = h('div', { class: 'choices' + (long ? ' long' : grid ? ' grid' : ''), id: 'f' + i, role: 'group' });
+  const maxLen = Math.max(...f.choices.map(x => x.length));
+  const grid = !long && (f.choices.length >= 4 ? maxLen > 5 : f.choices.length === 3 && maxLen > 9);
+  const tight = !long && !grid && f.choices.length === 3 && maxLen > 5; // three medium words (sedemus, sedetis): a little smaller so they fit on one line
+  const box = h('div', { class: 'choices' + (long ? ' long' : grid ? ' grid' : tight ? ' tight' : ''), id: 'f' + i, role: 'group' });
   const btns = f.choices.map(x => h('button', { type: 'button', class: 'opt', text: x, onclick: () => { if (ro) return; box.value = x; box.classList.remove('bad'); onPick(); } }));
   box.append(...btns);
   Object.defineProperty(box, 'value', { get: () => sel, set: v => { sel = v; btns.forEach(b => b.classList.toggle('sel', b.textContent === sel)); } });

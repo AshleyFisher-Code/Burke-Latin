@@ -346,7 +346,7 @@ for (const cid of ['c1', 'c2']) { const c = g.gChart(cid), want = c.fields.map((
 const V3 = { amo: ['amat', 'amant'], ambulo: ['ambulat', 'ambulant'], audio: ['audit', 'audiunt'], curro: ['currit', 'currunt'], habeo: ['habet', 'habent'], habito: ['habitat', 'habitant'],
   sedeo: ['sedet', 'sedent'], terreo: ['terret', 'terrent'], timeo: ['timet', 'timent'], vexo: ['vexat', 'vexant'], video: ['videt', 'vident'] };
 for (const [id, [sg, pl]] of Object.entries(V3)) { assert(g.v3(W[id], 'sg') === sg && g.v3(W[id], 'pl') === pl, 'verb form ' + id); }
-assert(g.DRILL_VERBS.every(v => v.stage === 3), 'only Stage 3 verbs are drilled so far');
+assert(g.DRILL_VERBS.every(v => v.stage <= 4), 'only Stage 3–4 verbs are drilled so far');
 // generated sentences: check the Latin independently, then the English key
 const P3 = g.pools3(), seen3 = new Set();
 let n3 = 0, cf3 = 0, of3 = 0;
@@ -409,6 +409,91 @@ setUnits([1, 2, 3]);
 for (let i = 0; i < 20; i++) for (const sp of buildDaily(st, { units: [1, 3] }, today, null).specs) { const c = cardFromSpec(sp); if (c.type === 'l2e' || c.type === 'pick') assert(isOn(W[c.words[0]]), 'skipped unit word'); }
 setUnits([1, 2, 3]);
 console.log(`stage 3: noun forms ${nf3}, sentences ${n3}, case/function ${cf3}, object forms ${of3}`);
+/* ---------- Stage 4: present tense ---------- */
+setUnits([1, 2, 3, 4]);
+const um = x => x.normalize('NFD').replace(/̄/g, '').normalize('NFC');
+// her chart, typed out: amo amas amat amamus amatis amant / habeo… / cado… / audio…
+const CHART4 = { 1: ['o', 'as', 'at', 'amus', 'atis', 'ant'], 2: ['eo', 'es', 'et', 'emus', 'etis', 'ent'], 3: ['o', 'is', 'it', 'imus', 'itis', 'unt'], 4: ['io', 'is', 'it', 'imus', 'itis', 'iunt'] };
+const CUT = { 1: 3, 2: 3, 3: 3, 4: 3 };
+const six = [[1, 'sg'], [2, 'sg'], [3, 'sg'], [1, 'pl'], [2, 'pl'], [3, 'pl']];
+let n4 = 0;
+const verbs4 = WORDS.filter(w => w.kind === 'vb' && w.en && w.conj !== 'irr');
+assert(verbs4.length === 19 && verbs4.every(v => v.stage <= 4), 'Stage 3 + 4 verbs drilled: ' + verbs4.length);
+for (const vb of verbs4) {
+  const stem = um(vb.inf).slice(0, -CUT[vb.conj]);
+  six.forEach(([p, nm], i) => { const want = i === 0 ? um(vb.lemma) : stem + CHART4[vb.conj][i]; n4++;
+    assert(g.conjForm(vb, p, nm) === want, `conj ${vb.lemma} ${p}${nm}: ${g.conjForm(vb, p, nm)} vs ${want}`);
+    if (i === 0 && vb.lemma !== 'appereo') assert(um(vb.lemma) === stem + CHART4[vb.conj][0], 'first principal part ' + vb.lemma);
+    // person & number
+    const c = g.gPnum(vb.id, p, nm);
+    for (const a of ['1st', '2nd', '3rd']) for (const b of ['singular', 'plural']) ok(c, [a, b], a === ['', '1st', '2nd', '3rd'][p] && b === (nm === 'sg' ? 'singular' : 'plural'), 'pnum ' + want + ' ' + a + ' ' + b);
+    // translate the verb: every accepted answer, and every other person's answer is wrong
+    const t = g.gVtrans(vb.id, p, nm), mine = new Set();
+    for (const pr of g.PRON_EN[p + nm]) for (const ve of g.vEnP(vb, p, nm, false)) { ok(t, [pr + ' ' + ve], true, 'vtrans ' + want); mine.add(pr + ' ' + ve); }
+    ok(t, [g.PRON_SHOW[p + nm].replace('he/she/it', 'she') + ' ' + g.vEnP(vb, p, nm, false)[0]], true, 'vtrans show ' + want);
+    for (const [p2, n2] of six) if (p2 !== p || n2 !== nm) for (const pr of g.PRON_EN[p2 + n2].slice(0, 2)) for (const ve of g.vEnP(vb, p2, n2, false).slice(0, 2)) if (!mine.has(pr + ' ' + ve)) ok(t, [pr + ' ' + ve], false, 'vtrans other person ' + want + ' <- ' + pr + ' ' + ve);
+    if (nm === 'pl' && p === 2) ok(t, ['you ' + g.vEnP(vb, 2, 'pl', false)[0]], false, 'bare you for -tis ' + want);
+    // English → tap the Latin
+    for (const st of [0, 1, 2]) { const k = g.gVpick(vb.id, p, nm, st);
+      assert(k.fields[0].choices.includes(want) && new Set(k.fields[0].choices).size === k.fields[0].choices.length, 'vpick choices ' + want);
+      for (const ch of k.fields[0].choices) ok(k, [ch], ch === want, 'vpick ' + k.prompt.eng + ' ' + ch);
+      const e = k.prompt.eng.toLowerCase(), want1 = { '1sg': /^i /, '2sg': /^you (?!all)/, '3sg': /^(he|she|it) /, '1pl': /^we /, '2pl': /^you all /, '3pl': /^they / }[p + nm];
+      assert(want1.test(e), 'vpick English matches person: ' + e + ' for ' + want); }
+  });
+  // conjugate it
+  const cj = g.gConj(vb.id), forms = six.map(([p, nm]) => g.conjForm(vb, p, nm));
+  ok(cj, forms, true, 'conj all ' + vb.lemma);
+  cj.fields.forEach((f, i) => { assert(f.choices.includes(forms[i]) && new Set(f.choices).size === f.choices.length && f.choices.length >= 2, 'conj choices ' + vb.lemma + ' ' + i);
+    for (const ch of f.choices) if (ch !== forms[i]) { const v = forms.slice(); v[i] = ch; ok(cj, v, false, 'conj wrong ' + vb.lemma + ' ' + i + ' ' + ch); } });
+  const wc = g.gConj(vb.id, 'which'); for (const ch of ['1st', '2nd', '3rd', '4th']) ok(wc, [ch], ch === ['', '1st', '2nd', '3rd', '4th'][vb.conj], 'which conj ' + vb.lemma + ' ' + ch);
+}
+for (const cid of ['pe', 'pv']) { const c = g.gChart(cid), want = { pe: ['-o', '-s', '-t', '-mus', '-tis', '-nt'], pv: ['a', 'e', 'i', 'i'] }[cid];
+  ok(c, want, true, 'chart ' + cid); c.fields.forEach((f, i) => { for (const ch of f.choices) if (ch !== want[i]) { const v = want.slice(); v[i] = ch; ok(c, v, false, 'chart wrong ' + cid + ' ' + i); } }); }
+// sentences with the subject in the verb, ego/tu/nos/vos, and eum/eam/eos/eas
+const P4 = g.pools3(), seen4 = new Set(); let s4n = 0, hid4 = 0, pro4 = 0, opro4 = 0, q4 = 0;
+for (let i = 0; i < 7000; i++) {
+  const sp = g.randomSpec3(g.pickOne, P4, 0.45), key = JSON.stringify(sp); if (seen4.has(key)) continue; seen4.add(key); s4n++;
+  const st = g.sentence3(sp), c = g.gDobj(sp);
+  assert(!/undefined|null/.test(st.latin + st.correct), 'undefined4: ' + st.latin + ' / ' + st.correct);
+  st.parts.forEach(p => { if (!p.cl.kind3) return; const tc = p.cl, per = tc.s.length ? 3 : tc.per;
+    const vb = W[tc.v], idx = six.findIndex(([a, b]) => a === per && b === p.sNum), want = idx === 0 ? um(vb.lemma) : um(vb.inf).slice(0, -3) + CHART4[vb.conj][idx];
+    assert(p.vf === want, 'verb form ' + st.latin + ' ' + p.vf + ' vs ' + want);
+    if (!tc.s.length) { hid4++; if (tc.pro) { pro4++; assert(p.sLat[0] === { '1sg': 'ego', '2sg': 'tu', '1pl': 'nos', '2pl': 'vos' }[per + tc.num], 'pronoun ' + st.latin); } else assert(!p.sLat.length, 'hidden subject shows nothing ' + st.latin); }
+    if (tc.opro) { opro4++; assert(['eum', 'eam', 'eos', 'eas'].includes(p.oLat[0]) && W[tc.v].tr === 'anim', 'object pronoun ' + st.latin); }
+    if (tc.k === 'tr' && !tc.opro) assert(p.oLat[0] === accOf(W[tc.o], tc.onum), 'object accusative4 ' + st.latin);
+  });
+  ok(c, [st.correct], true, 'dobj4 key ' + st.latin);
+  ok(c, [st.correct.toLowerCase().replace(/[.,]/g, '')], true, 'dobj4 lower ' + st.latin);
+  const j = st.join ? ' ' + st.join + ' ' : '';
+  for (const a of st.parts[0].acc.slice(0, 6)) for (const b of (st.parts[1] ? st.parts[1].acc.slice(0, 2) : [''])) ok(c, [(a + j + b).trim()], true, 'dobj4 acc ' + st.latin);
+  st.cons.forEach((con, ci) => { const other = st.parts[1 - ci] ? st.parts[1 - ci].acc[0] : null;
+    for (const bad of [...(con.person || []).filter((x, k) => k % 7 === 0).slice(0, 6), ...con.subjNum.slice(0, 2), ...con.objNum.slice(0, 2), ...con.swap.slice(0, 2)]) if (!st.parts[ci].acc.includes(bad))
+      ok(c, [!st.join ? bad : ci === 0 ? bad + j + other : st.parts[0].acc[0] + j + bad], false, 'dobj4 wrong reading ' + st.latin + ' :: ' + bad); });
+  for (const ask of g.caseFnAsks(sp)) { const f = g.gCaseFn(sp, ask); q4++;
+    if (ask.subjof) { const p = st.parts[ask.p], want = p.hidden ? g.PRON_SHOW[p.pk] : p.sLat.filter((t, i) => t !== 'et' && !(p.cl.sa && i === 1)).join(' et ');
+      assert(f.fields[0].choices.includes(want) && new Set(f.fields[0].choices).size === f.fields[0].choices.length, 'subjof choices ' + st.latin);
+      for (const ch of f.fields[0].choices) ok(f, [ch], ch === want, 'subjof ' + st.latin + ' ' + p.vf + ' ' + ch); }
+    else if (ask.pn) { const p = st.parts[ask.p]; for (const a of ['1st', '2nd', '3rd']) for (const b of ['singular', 'plural']) ok(f, [a, b], a === ['', '1st', '2nd', '3rd'][p.per] && b === (p.sNum === 'sg' ? 'singular' : 'plural'), 'pn ' + st.latin + ' ' + a + b); }
+    else if (ask.modify) { const want = st.parts[ask.p].lat[ask.n]; for (const ch of f.fields[0].choices) ok(f, [ch], ch === want, 'modify4 ' + f.summary + ' ' + ch); }
+    else { const right = [ask.role === 'obj' ? 'accusative' : 'nominative', { subj: 'subject', obj: 'direct object', comp: 'complement' }[ask.role]];
+      for (const a of ['nominative', 'accusative']) for (const b of ['subject', 'direct object', 'complement']) ok(f, [a, b], a === right[0] && b === right[1], 'casefn4 ' + st.latin + ' ' + a + ' ' + b); }
+  }
+  assert(cardFromSpec({ t: 'g', type: 'dobj', params: [sp], skill: 'dobj' }).correct === c.correct, 'rebuild dobj4');
+}
+assert(hid4 > 500 && pro4 > 50 && opro4 > 50, `stage 4 sentence mix: hidden ${hid4}, pronoun ${pro4}, object pronoun ${opro4}`);
+for (let i = 0; i < 25; i++) {
+  const m = buildMock(st, { units: [1, 2, 3, 4] }, 4), pts = m.specs.reduce((a, x) => a + x.pts, 0); assert(pts === 30, 'stage 4 mock points = ' + pts);
+  const mg = buildMock(st, { units: [1, 2, 3, 4] }, 4, 'grammar'), pg = mg.specs.reduce((a, x) => a + x.pts, 0); assert(pg === 20, 'stage 4 grammar mock points = ' + pg);
+  for (const b of [m, mg, ...['pnum', 'vtrans', 'vpick', 'conj', 'casefn', 'dobj', 'charts'].map(k => buildSkill(st, { units: [1, 2, 3, 4] }, k))])
+    for (const sp of b.specs) { const c = cardFromSpec(sp); if (c.type === 'l2e' || c.type === 'pick') continue; if (c.fields.every(f => f.choices)) assert(!c.check(c.fields.map(() => '')).ok.every(Boolean), 'blank accepted ' + c.summary); }
+}
+// With Stage 4 unticked, nothing from it appears (no hidden subjects, no Stage 4 skills or words)
+setUnits([1, 2, 3]);
+for (let i = 0; i < 40; i++) for (const b of [buildDaily(st, { units: [1, 2, 3] }, today, null), buildSkill(st, { units: [1, 2, 3] }, 'dobj'), buildSkill(st, { units: [1, 2, 3] }, 'casefn'), buildMock(st, { units: [1, 2, 3] }, 3)])
+  for (const sp of b.specs) { const c = cardFromSpec(sp); for (const id of c.words || []) assert(W[id].stage <= 3 || (W[id].alsoIn || []).some(x => x <= 3), `unticked stage 4 word ${id} in ${b.mode}`); assert(!c.skill || g.SKILL[c.skill].stage <= 3, 'unticked skill ' + c.skill);
+    if (c.type === 'dobj') for (const part of [sp.params[0].c1, sp.params[0].c2].filter(Boolean)) assert(part.kind === 'lv' || part.s.length, 'hidden subject before Stage 4'); }
+setUnits([1, 2, 3]);
+console.log(`stage 4: verb forms ${n4}, sentences ${s4n} (hidden ${hid4}, ego/tu/nos/vos ${pro4}, eum/eam ${opro4}), questions ${q4}`);
 console.log(`two-part sentences ${two}, fix-the-error ${fix2n}`);
 console.log(`checks: ${n}  failures: ${fails.length}  (phrases ${phraseCount}, sentences ${sentCount})`);
 if (fails.length) { console.log(fails.slice(0, 80).join('\n')); process.exit(1); }

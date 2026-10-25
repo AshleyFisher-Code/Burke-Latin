@@ -1,10 +1,10 @@
 // Builds practice sessions as lists of small, saveable "specs", and turns specs back into cards.
 import { WORDS, W, MAX_STAGE, setUnits, unitsOf, curUnit, isOn, inUnit, stageOn } from './data.js';
-import { vocabL2E, vocabPick, pickOpts, gNID, gChart, gAgree, gPhrase, gFixPhrase, gVnum, gSV, gComp, gRole, gTrans, gFixSent, gTrans2, gFix2, randomSpec2, poolsFor, fix2Errors, gCase, gDecline, gObjForm, gCaseFn, gDobj, caseFnAsks, randomSpec3, pools3,
+import { vocabL2E, vocabPick, pickOpts, gNID, gChart, gAgree, gPhrase, gFixPhrase, gVnum, gSV, gComp, gRole, gTrans, gFixSent, gTrans2, gFix2, randomSpec2, poolsFor, fix2Errors, gCase, gDecline, gObjForm, gCaseFn, gDobj, caseFnAsks, randomSpec3, pools3, gPnum, gVtrans, gVpick, gConj,
   makeSkillCard, SKILLS, SKILL, CHARTS, shuffle, pickOne, PL_NOUNS, randomSentenceSpec, PHRASE_ADJS, PERSONS, NOUNS, COMP_ADJS } from './gen.js';
 import { wordStatus, skillAcc, quizWords, quizSkills, isMasteryDay, quizCovers } from './srs.js';
 
-const BUILD = { nid: gNID, chart: gChart, agree: gAgree, phrase: gPhrase, fixphrase: gFixPhrase, vnum: gVnum, sv: gSV, comp: gComp, role: gRole, trans: gTrans, fixsent: gFixSent, trans2: gTrans2, fix2: gFix2, case: gCase, decline: gDecline, objform: gObjForm, casefn: gCaseFn, dobj: gDobj };
+const BUILD = { nid: gNID, chart: gChart, agree: gAgree, phrase: gPhrase, fixphrase: gFixPhrase, vnum: gVnum, sv: gSV, comp: gComp, role: gRole, trans: gTrans, fixsent: gFixSent, trans2: gTrans2, fix2: gFix2, case: gCase, decline: gDecline, objform: gObjForm, casefn: gCaseFn, dobj: gDobj, pnum: gPnum, vtrans: gVtrans, vpick: gVpick, conj: gConj };
 export function cardFromSpec(sp) {
   let c;
   // He only ever reads Latin and answers in English. Old saved English→Latin cards are shown as Latin→English.
@@ -163,6 +163,18 @@ export function buildMock(state, settings, stage, covers = 'both') {
   const vocab = cur.slice(0, 8).concat(misc.slice(0, 2));
   const sections = [];
   sections.push({ name: 'I. Vocabulary', pts: 1, specs: shuffle(vocab).map(w => vocabSpec(w.id, 'l2e')) });
+  if (stage >= 4) { // Stage 4 quiz: translate verbs, conjugate, person/number + case questions, translating (30 points with vocab, 20 without)
+    const vt = []; for (let i = 0; i < 5; i++) vt.push(gSpec(makeSkillCard('vtrans', pick, stage)));
+    sections.push({ name: 'II. Translate the verbs', pts: 1, specs: vt });
+    sections.push({ name: 'III. Conjugate (3 points)', pts: 3, specs: [gSpec(makeSkillCard('conj', pick, stage))].map(sp => sp.params[1] === 'which' ? { ...sp, params: [sp.params[0], 'all'], type: 'conj' } : sp) });
+    const cf = []; while (cf.length < 4) cf.push(gSpec(makeSkillCard('casefn', pick, stage)));
+    sections.push({ name: 'IV. Grammar questions', pts: 1, specs: cf });
+    const P = pools3(), tr = []; for (let i = 0; i < 4; i++) tr.push(gSpec(gDobj(randomSpec3(pick, P, i < 2 ? 0.8 : 0.3))));
+    sections.push({ name: 'V. Translating (2 points each)', pts: 2, specs: tr });
+    if (covers === 'grammar') sections.shift();
+    const specs = []; sections.forEach((s, si) => s.specs.forEach(sp => specs.push({ ...sp, sec: si, pts: s.pts })));
+    return { mode: 'mock', kind: covers, title: covers === 'grammar' ? `Grammar mock quiz · Stage ${stage}` : `Mock quiz · Stage ${stage}`, test: true, stage, sections: sections.map(s => ({ name: s.name })), specs };
+  }
   if (stage >= 3) { // Stage 3 quiz: decline, case & function, charts, translate (30 points with vocab, 20 without)
     const nouns3 = shuffle(PL_NOUNS.filter(w => isOn(w) && w.stage <= stage)).slice(0, 4);
     sections.push({ name: 'II. Decline the nouns', pts: 1, specs: nouns3.map((w, i) => ({ t: 'g', type: 'decline', params: [w.id, i % 2 ? 'pl' : 'sg', i < 2 ? 'acc' : (Math.random() < 0.5 ? 'acc' : 'nom')], skill: 'case' })) });

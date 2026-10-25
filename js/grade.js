@@ -28,9 +28,9 @@ const thr = n => (n <= 3 ? 1 : n <= 6 ? 2 : 3);
 export const EN_TOKENS = new Set();
 const addTok = s => normEn(s).split(/[\s\/,]+/).filter(Boolean).forEach(t => EN_TOKENS.add(t));
 WORDS.forEach(w => { w.mean.forEach(addTok); addTok(w.show); (w.enPl || []).forEach(addTok); (w.wrongNum || []).forEach(addTok); if (w.base) addTok(w.base); if (w.prog) addTok(w.prog); });
-['is', 'are', 'not', 'and', 'he', 'she', 'it', 'they', 'women', 'men', 'girls', 'boys', 'but', 'does', 'do', 'in', 'who', 'walk', 'walks', 'walking', 'fields', 'house'].forEach(t => EN_TOKENS.add(t));
+['is', 'are', 'not', 'and', 'he', 'she', 'it', 'they', 'women', 'men', 'girls', 'boys', 'but', 'does', 'do', 'in', 'who', 'walk', 'walks', 'walking', 'fields', 'house', 'i', 'we', 'you', 'all', 'am', 'him', 'her', 'them', 'guys', 'yall', 'because', 'wolves'].forEach(t => EN_TOKENS.add(t));
 // Small grammar words carry number/meaning, so they must be right (doubled letters forgiven).
-const FUNC = new Set(['is', 'are', 'not', 'and', 'he', 'she', 'it', 'they', 'but', 'does', 'do', 'in', 'who']);
+const FUNC = new Set(['is', 'are', 'not', 'and', 'he', 'she', 'it', 'they', 'but', 'does', 'do', 'in', 'who', 'i', 'we', 'you', 'all', 'am', 'him', 'her', 'them', 'because']);
 // Is typed word x close enough to target t? Ties go to the target; a closer (or exact) other word wins.
 // Consonant skeleton, for sound-alike spellings (rode = road, grate = great, rites = writes).
 export const sKey = s => {

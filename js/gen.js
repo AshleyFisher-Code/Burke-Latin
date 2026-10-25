@@ -476,10 +476,11 @@ export function makeSkillCard(skillId, pick = pickOne, maxStage = 99) {
   const adjFor = (n, list) => pick(list.filter(a => fits(n, a)));
   const num = () => (coin(0.5) ? 'sg' : 'pl');
   const pair2 = () => { const a = pick(persons); let b = pick(persons.filter(w => w.id !== a.id)); return [a.id, b.id]; };
+  if (['pnum', 'vtrans', 'vpick', 'conj'].includes(skillId)) return makeSkillCard4(skillId, pick);
   switch (skillId) {
     case 'case': { const n = pick(nouns), nm = num(), cas = coin(0.6) ? 'acc' : 'nom'; return coin(0.5) ? gCase(n.id, nm, cas) : gDecline(n.id, nm, cas); }
     case 'objform': { const P = pools3(), mode = coin(0.65) ? 'noun' : 'adj'; const tc = randomT(pick, P, { k: 'tr', oaP: mode === 'adj' ? 1 : 0 }); return gObjForm(tc, tc.oa ? mode : 'noun'); }
-    case 'casefn': { const P = pools3(); for (let i = 0; i < 20; i++) { const sp = randomSpec3(pick, P, 0.35), asks = caseFnAsks(sp); if (!asks.length) continue; const hard = asks.filter(a => a.role === 'obj' || a.modify || a.role === 'comp'); return gCaseFn(sp, pickOne(hard.length && coin(0.7) ? hard : asks)); } return gCaseFn({ c1: { k: 'tr', s: ['puer'], num: 'sg', v: 'video', o: 'lupus', onum: 'sg', order: 'OSV' } }, { p: 0, role: 'obj', w: 0 }); }
+    case 'casefn': { const P = pools3(); for (let i = 0; i < 20; i++) { const sp = randomSpec3(pick, P, 0.35), asks = caseFnAsks(sp); if (!asks.length) continue; const hard = asks.filter(a => a.role === 'obj' || a.modify || a.role === 'comp' || a.pn || a.subjof); return gCaseFn(sp, pickOne(hard.length && coin(0.7) ? hard : asks)); } return gCaseFn({ c1: { k: 'tr', s: ['puer'], num: 'sg', v: 'video', o: 'lupus', onum: 'sg', order: 'OSV' } }, { p: 0, role: 'obj', w: 0 }); }
     case 'dobj': return gDobj(randomSpec3(pick, pools3()));
     case 'nid': return gNID(pick(nouns).id, num());
     case 'charts': return gChart(pickOne(CHARTS.filter(c => stageOn(c.stage) && c.stage <= maxStage)).id);
@@ -622,7 +623,7 @@ export function sentence2(sp) {
     help: [...new Set([...p1.help, ...p2.help])], words: [...new Set([...p1.words, ...p2.words])] };
 }
 // Typed English, cleaned: contractions and the common spellings of "does" fixed so they can't trip him.
-export const prenorm = s => (s || '').toLowerCase().replace(/\b(teh|hte|th|tha|thee)\b/g, 'the').replace(/\bwolfs\b/g, 'wolves').replace(/\bwolfes\b/g, 'wolves').replace(/\bwomans\b/g, 'women').replace(/\bmans\b/g, 'men').replace(/\b(and|but|is|are|the|a|not|in|do|does)(\s+\1\b)+/g, '$1').replace(/[’]/g, "'").replace(/\bdoesn'?t\b/g, 'does not').replace(/\bdon'?t\b/g, 'do not')
+export const prenorm = s => (s || '').toLowerCase().replace(/[’]/g, "'").replace(/\b(u|ya|yu|yoo)\b/g, 'you').replace(/\bya'?ll\b/g, "y'all").replace(/\bi'?m\b/g, 'i am').replace(/\b(you|we|they)'re\b/g, '$1 are').replace(/\b(he|she|it)'s\b/g, '$1 is').replace(/\b(you|we|they)re\b/g, '$1 are').replace(/\b(teh|hte|th|tha|thee)\b/g, 'the').replace(/\bwolfs\b/g, 'wolves').replace(/\bwolfes\b/g, 'wolves').replace(/\bwomans\b/g, 'women').replace(/\bmans\b/g, 'men').replace(/\b(and|but|is|are|the|a|not|in|do|does)(\s+\1\b)+/g, '$1').replace(/[’]/g, "'").replace(/\bdoesn'?t\b/g, 'does not').replace(/\bdon'?t\b/g, 'do not')
   .replace(/\bisn'?t\b/g, 'is not').replace(/\baren'?t\b/g, 'are not').replace(/\bwho'?s\b/g, 'who is').replace(/\b(dosent|dosnt|doesent|dosen'?t|dosn'?t)\b/g, 'does not').replace(/\b(dose|dos|duz|dus|doez)\b/g, 'does');
 function matchPart(str, part, flip) {
   if (part.acc.includes(str)) return { ok: true };
@@ -790,25 +791,37 @@ export function poolsFor(maxStage) {
 
 /* =============== Stage 3: direct objects & the accusative case =============== */
 const unmac = s => s.normalize('NFD').replace(/[̄]/g, '').normalize('NFC');
-// 3rd person present forms from the infinitive (amāre → amat/amant, currere → currit/currunt, audīre → audit/audiunt).
-export function v3(vb, num) {
+// Present tense from the infinitive (her chart): chop -re, add the linking vowel, add -o -s -t -mus -tis -nt.
+// 1st: ama- (amo drops the a) · 2nd: habe- · 3rd: cad-i- (cado, cadunt) · 4th: audi- (audiunt).
+export const PERSONS6 = [[1, 'sg'], [2, 'sg'], [3, 'sg'], [1, 'pl'], [2, 'pl'], [3, 'pl']];
+export const PN_LABEL = { '1sg': '1st singular', '2sg': '2nd singular', '3sg': '3rd singular', '1pl': '1st plural', '2pl': '2nd plural', '3pl': '3rd plural' };
+export function conjForm(vb, per, num) {
   const inf = unmac(vb.inf);
-  if (vb.conj === 1 || vb.conj === 2) { const st = inf.slice(0, -2); return num === 'sg' ? st + 't' : st + 'nt'; }
-  if (vb.conj === 3) { const st = inf.slice(0, -3); return num === 'sg' ? st + 'it' : st + 'unt'; }
-  if (vb.conj === 4) { const st = inf.slice(0, -2); return num === 'sg' ? st + 't' : st + 'unt'; }
+  if (per === 1 && num === 'sg') return unmac(vb.lemma);
+  const END = { '2sg': 's', '3sg': 't', '1pl': 'mus', '2pl': 'tis', '3pl': 'nt' }, k = per + num;
+  if (vb.conj === 1 || vb.conj === 2) return inf.slice(0, -2) + END[k];
+  if (vb.conj === 3) { const st = inf.slice(0, -3); return k === '3pl' ? st + 'unt' : st + 'i' + END[k]; }
+  if (vb.conj === 4) { const st = inf.slice(0, -2); return k === '3pl' ? st + 'unt' : st + END[k]; }
   return null;
 }
-// English for a 3rd person verb: every way he might say it.
-export function vEn(vb, num, neg) {
-  const out = [];
+export function v3(vb, num) { return conjForm(vb, 3, num); }
+// English subjects hidden in the ending
+export const PRON_EN = { '1sg': ['i'], '2sg': ['you'], '3sg': ['he', 'she', 'it', 'he/she', 'he/she/it', 'he or she', 'he/it', 'she/it'], '1pl': ['we'],
+  '2pl': ['you all', "y'all", 'yall', 'you guys', 'you pl', 'you plural', 'all of you', 'you both', 'you two'], '3pl': ['they'] };
+export const PRON_SHOW = { '1sg': 'I', '2sg': 'you', '3sg': 'he/she/it', '1pl': 'we', '2pl': 'you all', '3pl': 'they' };
+export const PRON_LAT = { '1sg': 'ego', '2sg': 'tu', '1pl': 'nos', '2pl': 'vos' };
+// English verb for any person: simple, progressive (am/is/are …ing) and emphatic (do/does …), plus "not".
+export function vEnP(vb, per, num, neg) {
+  const out = [], k = per + num, third = k === '3sg';
+  const be = k === '1sg' ? 'am' : third ? 'is' : 'are';
   for (const e of vb.en) {
-    const be = /^is /.test(e.sg);
-    if (!neg) { out.push(num === 'sg' ? e.sg : e.pl); if (e.ing) out.push((num === 'sg' ? 'is ' : 'are ') + e.ing); }
-    else if (be) out.push(num === 'sg' ? e.sg.replace(/^is /, 'is not ') : e.pl.replace(/^are /, 'are not '));
-    else { out.push((num === 'sg' ? 'does not ' : 'do not ') + e.pl); if (e.ing) out.push((num === 'sg' ? 'is not ' : 'are not ') + e.ing); }
+    if (/^is /.test(e.sg)) { const rest = e.sg.replace(/^is /, ''); out.push(`${be} ${neg ? 'not ' : ''}${rest}`); continue; }
+    if (!neg) { out.push(third ? e.sg : e.pl); if (e.ing) out.push(`${be} ${e.ing}`); out.push(`${third ? 'does' : 'do'} ${e.pl}`); }
+    else { out.push(`${third ? 'does' : 'do'} not ${e.pl}`); if (e.ing) out.push(`${be} not ${e.ing}`); }
   }
   return out;
 }
+export function vEn(vb, num, neg) { return vEnP(vb, 3, num, neg); }
 export const DRILL_VERBS = WORDS.filter(w => w.kind === 'vb' && w.en);
 const accF = (n, num) => n.acc[num];
 const adjAcc = (a, g, num) => a.acc[g][num];
@@ -817,47 +830,60 @@ const nounEnOpts = (n, num, adj, g) => { const out = []; for (const nm of nEn(n,
 const nounShow = (n, num, adj) => `the ${adj ? adj.mean[0] + ' ' : ''}${nEn(n, num)[0]}`;
 
 // One transitive or intransitive clause.
-// tc = {k:'tr'|'int', s:[ids], num, nums, sa, v, o, onum, oa, neg, order:'SOV'|'OSV'|'SVO'}
+// tc = {k:'tr'|'int', s:[ids], num, nums, sa, v, o, onum, oa, opro, neg, order:'SOV'|'OSV'|'SVO', per, pro}
+//   per 1/2 (or s:[] with per 3) = the subject is in the verb; pro = show ego/tu/nos/vos; opro = eum/eam/eos/eas as the object
+export const OPRO = { eum: { en: ['him'], num: 'sg', g: 'm' }, eam: { en: ['her'], num: 'sg', g: 'f' }, eos: { en: ['them'], num: 'pl', g: 'm' }, eas: { en: ['them'], num: 'pl', g: 'f' } };
 export function tclause(tc) {
-  const vb = W[tc.v], ws = tc.s.map(id => W[id]);
-  let sLat, sEn, sShow, sNum, sG;
-  if (ws.length === 1) { const n = ws[0], sa = tc.sa ? W[tc.sa] : null; sNum = tc.num; sG = n.g;
+  const vb = W[tc.v], ws = tc.s.map(id => W[id]), per = tc.per || 3;
+  let sLat, sEn, sShow, sNum, sG, hidden = false;
+  if (!ws.length) { sNum = tc.num; sG = 'm'; hidden = true; const k = per + sNum;
+    sLat = tc.pro && PRON_LAT[k] ? [PRON_LAT[k]] : []; sEn = PRON_EN[k]; sShow = PRON_SHOW[k]; }
+  else if (ws.length === 1) { const n = ws[0], sa = tc.sa ? W[tc.sa] : null; sNum = tc.num; sG = n.g;
     sLat = [nForm(n, sNum)].concat(sa ? [aForm(sa, n.g, sNum)] : []); sEn = nounEnOpts(n, sNum, sa); sShow = nounShow(n, sNum, sa); }
   else { const nums = tc.nums || ['sg', 'sg']; sNum = 'pl'; sG = ws.some(w => w.g === 'm') ? 'm' : 'f';
     sLat = [nForm(ws[0], nums[0]), 'et', nForm(ws[1], nums[1])];
     sEn = []; for (const x of nEn(ws[0], nums[0])) for (const y of nEn(ws[1], nums[1])) sEn.push(`${x} and ${y}`);
     sShow = `the ${nEn(ws[0], nums[0])[0]} and the ${nEn(ws[1], nums[1])[0]}`; }
-  const vf = v3(vb, sNum), neg = tc.neg ? ['non'] : [];
+  const vPer = ws.length ? 3 : per;
+  const vf = conjForm(vb, vPer, sNum), neg = tc.neg ? ['non'] : [];
   const V = [...neg, vf];
   let oLat = [], oEn = [''], oShow = '';
-  if (tc.k === 'tr') { const o = W[tc.o], oa = tc.oa ? W[tc.oa] : null;
+  if (tc.k === 'tr' && tc.opro) { oLat = [tc.opro]; oEn = OPRO[tc.opro].en; oShow = OPRO[tc.opro].en[0]; }
+  else if (tc.k === 'tr') { const o = W[tc.o], oa = tc.oa ? W[tc.oa] : null;
     oLat = [accF(o, tc.onum)].concat(oa ? [adjAcc(oa, o.g, tc.onum)] : []); oEn = nounEnOpts(o, tc.onum, oa); oShow = nounShow(o, tc.onum, oa); }
   const order = tc.k === 'tr' ? tc.order || 'SOV' : 'SV';
   const lat = order === 'OSV' ? [...oLat, ...sLat, ...V] : order === 'SVO' ? [...sLat, ...V, ...oLat] : [...sLat, ...oLat, ...V];
-  const vEns = vEn(vb, sNum, tc.neg);
+  const vEns = vEnP(vb, vPer, sNum, tc.neg);
   const acc = []; for (const se of sEn) for (const ve of vEns) for (const oe of oEn) acc.push(`${se} ${ve} ${oe}`);
   const show = `${sShow} ${vEns[0]}${oShow ? ' ' + oShow : ''}`;
   const words = [...tc.s, tc.sa, tc.v, tc.o, tc.oa].filter(Boolean);
-  return { lat, acc: enAns(acc), show, sLat, oLat, vf, sNum, sG, S: { num: sNum, g: sG, latin: sLat.join(' '), person: ws.every(w => w.person), en: sEn, compound: ws.length > 1 }, words, cl: { ...tc, kind3: true } };
+  const pk = vPer + sNum;
+  return { lat, acc: enAns(acc), show, sLat, oLat, vf, sNum, sG, per: vPer, pk, hidden,
+    S: { num: sNum, g: sG, latin: sLat.join(' ') || `(in the verb: ${PRON_SHOW[pk]})`, person: ws.every(w => w.person), en: sEn, compound: ws.length > 1 }, words, cl: { ...tc, kind3: true } };
 }
 // The wrong readings we watch for: roles swapped, or the wrong number on the subject or the object.
 function tContrasts(tc) {
-  const out = { swap: [], subjNum: [], objNum: [] };
-  if (tc.k === 'tr' && tc.s.length === 1) {
+  const out = { swap: [], subjNum: [], objNum: [], person: [] };
+  if (tc.k === 'tr' && tc.s.length === 1 && tc.o && !tc.opro) {
     const sw = tclause({ ...tc, s: [tc.o], num: tc.onum, sa: tc.oa, o: tc.s[0], onum: tc.num, oa: tc.sa }); out.swap = sw.acc;
   }
-  if (tc.s.length === 1 && W[tc.s[0]].pl) out.subjNum = tclause({ ...tc, num: tc.num === 'sg' ? 'pl' : 'sg' }).acc;
-  if (tc.k === 'tr' && W[tc.o].pl) out.objNum = tclause({ ...tc, onum: tc.onum === 'sg' ? 'pl' : 'sg' }).acc;
+  if ((tc.s.length === 1 && W[tc.s[0]].pl) || !tc.s.length) out.subjNum = tclause({ ...tc, num: tc.num === 'sg' ? 'pl' : 'sg' }).acc;
+  if (!tc.s.length) for (const [p, n] of PERSONS6) if (!(p === (tc.per || 3) && n === tc.num)) out.person.push(...tclause({ ...tc, per: p, num: n }).acc);
+  if (tc.k === 'tr' && tc.opro) { const flip = { eum: 'eos', eos: 'eum', eam: 'eas', eas: 'eam' }[tc.opro]; out.objNum = tclause({ ...tc, opro: flip }).acc; }
+  else if (tc.k === 'tr' && W[tc.o].pl) out.objNum = tclause({ ...tc, onum: tc.onum === 'sg' ? 'pl' : 'sg' }).acc;
   return out;
 }
+const ENDING_SAYS = { '1sg': '-o = I', '2sg': '-s = you', '3sg': '-t = he/she/it', '1pl': '-mus = we', '2pl': '-tis = you all', '3pl': '-nt = they' };
 function tHints(p, toks, con) {
   const t = toks.join(' '), tc = p.cl, out = [];
-  const o = tc.o ? W[tc.o] : null;
-  if (con.swap.includes(t)) out.push(`Who does it? ${p.sLat[0]} is nominative (subject). ${p.oLat[0]} ends in ${caseEnd(o, tc.onum, 'acc')}: accusative, so it's the direct object. "${proper(p.show)}."`);
+  const o = tc.o && !tc.opro ? W[tc.o] : null;
+  if (p.hidden && (con.person.includes(t) || con.subjNum.includes(t))) out.push(`No nominative, so the subject is in the verb: ${p.vf} ends in ${ENDING_SAYS[p.pk]}. "${proper(p.show)}."`);
+  else if (tc.opro && con.objNum.includes(t)) out.push(`${tc.opro} = ${OPRO[tc.opro].en[0]} (accusative, the direct object).`);
+  else if (con.swap.includes(t)) out.push(`Who does it? ${p.sLat[0]} is nominative (subject). ${p.oLat[0]} ends in ${caseEnd(o, tc.onum, 'acc')}: accusative, so it's the direct object. "${proper(p.show)}."`);
   else if (con.objNum.includes(t)) out.push(`${p.oLat[0]} is accusative ${tc.onum === 'sg' ? 'singular' : 'plural'} (${caseEnd(o, tc.onum, 'acc')}), so it's "${nEn(o, tc.onum)[0]}."`);
   else if (con.subjNum.includes(t)) out.push(`${p.sLat[0]} is nominative ${p.sNum === 'sg' ? 'singular' : 'plural'}, and ${p.vf} ends in ${p.sNum === 'sg' ? '-t' : '-nt'}: "${proper(p.show)}."`);
   else if (tc.neg && !toks.includes('not')) out.push(`non means not: "${proper(p.show)}."`);
-  else if ((() => { const vb = W[tc.v], other = vEn(vb, p.sNum === 'sg' ? 'pl' : 'sg', tc.neg).map(normEn), mine = vEn(vb, p.sNum, tc.neg).map(normEn), pad = ' ' + t + ' ';
+  else if (!p.hidden && (() => { const vb = W[tc.v], other = vEn(vb, p.sNum === 'sg' ? 'pl' : 'sg', tc.neg).map(normEn), mine = vEn(vb, p.sNum, tc.neg).map(normEn), pad = ' ' + t + ' ';
     return other.some(x => pad.includes(' ' + x + ' ')) && !mine.some(x => pad.includes(' ' + x + ' ')); })())
     out.push(`${p.vf} ends in ${p.sNum === 'sg' ? '-t, so it\'s singular: "' + vEn(W[tc.v], 'sg', tc.neg)[0] + '"' : '-nt, so it\'s plural: "' + vEn(W[tc.v], 'pl', tc.neg)[0] + '"'}. "${proper(p.show)}."`);
   else if (o && toks.length) out.push(`Find the verb (${p.vf}), then the subject (nominative: ${p.sLat.join(' ')})${o ? `, then the direct object (accusative: ${p.oLat.join(' ')})` : ''}.`);
@@ -869,13 +895,18 @@ function partOf(c, prev) { return c.kind === 'lv' ? clause(c.cl, prev) : tclause
 function contrastsOf(c, prev) { if (c.kind === 'lv') { const f = flipClause(c.cl, prev); return { swap: [], subjNum: f ? f.acc : [], objNum: [] }; } return tContrasts(c); }
 export function sentence3(sp) {
   const p1 = partOf(sp.c1); const parts = [p1], cons = [contrastsOf(sp.c1)];
-  if (sp.c2) { parts.push(partOf(sp.c2, p1.S)); cons.push(contrastsOf(sp.c2, p1.S)); }
+  if (sp.c2) { const p2 = partOf(sp.c2, p1.S); parts.push(p2); cons.push(contrastsOf(sp.c2, p1.S));
+    // "rivum videmus et currimus" = "we see the stream and run": English can leave out a subject that carries over
+    if (p2.cl && p2.cl.kind3 && p2.hidden && p1.cl && p1.cl.kind3 && p1.pk === p2.pk) {
+      const bare = vEnP(W[p2.cl.v], p2.per, p2.sNum, p2.cl.neg).flatMap(ve => p2.oLat.length ? (p2.cl.opro ? OPRO[p2.cl.opro].en : nounEnOpts(W[p2.cl.o], p2.cl.onum, p2.cl.oa ? W[p2.cl.oa] : null)).map(oe => `${ve} ${oe}`) : [ve]);
+      p2.acc = [...new Set([...p2.acc, ...enAns(bare)])];
+    } }
   const latin = cap([...p1.lat, ...(sp.c2 ? [sp.conj, ...parts[1].lat] : [])].join(' ')) + '.';
   const correct = proper(cap(p1.show) + (sp.c2 ? `${sp.conj === 'sed' ? ', but' : sp.conj === 'quod' ? ' because' : ' and'} ${parts[1].show}` : '') + '.');
   const help = [...new Set(parts.flatMap(p => p.help || []))];
   return { latin, parts, cons, join: sp.c2 ? CONJ_EN[sp.conj] : null, correct, help, words: [...new Set(parts.flatMap(p => p.words))] };
 }
-const allCon = c => [...c.swap, ...c.subjNum, ...c.objNum];
+const allCon = c => [...c.swap, ...c.subjNum, ...c.objNum, ...(c.person || [])];
 export function gDobj(sp) {
   const st = sentence3(sp);
   return {
@@ -966,6 +997,24 @@ export function gObjForm(tc, mode) {
 // sp = sentence spec for sentence3; ask = {p: part index, role: 'subj'|'obj'|'comp', w: index of the word inside the part's Latin} or {modify: true, ...}
 export function gCaseFn(sp, ask) {
   const st = sentence3(sp), p = st.parts[ask.p], word = p.lat[ask.w];
+  if (ask.pn) { const k = p.pk, per = Number(k[0]), num = k.slice(1);
+    return { type: 'casefn', skill: 'casefn', cid: 'g:casefn', words: st.words, stage: 4,
+      instr: `What is the person and number of ${word}?`, prompt: { latin: st.latin, help: st.help },
+      fields: [{ label: 'Person', choices: ['1st', '2nd', '3rd'] }, { label: 'Number', choices: ['singular', 'plural'] }],
+      check: v => { const ok = [v[0] === ['', '1st', '2nd', '3rd'][per], v[1] === (num === 'sg' ? 'singular' : 'plural')]; return { ok, hints: ok.every(Boolean) ? [] : [`${word} ends in ${ENDING_SAYS[k]}: ${PN_LABEL[k]} (present tense).`], notes: [] }; },
+      correct: `${word}: ${PN_LABEL[k]}, present tense`, summary: `${word}: person + number`, params: [sp, ask] }; }
+  if (ask.subjof) {
+    const subjOf = q => q.sLat.filter((t, i) => t !== 'et' && !(q.cl.sa && i === 1)).join(' et ');
+    const want = p.hidden ? PRON_SHOW[p.pk] : subjOf(p);
+    const nouns = uniq(st.parts.flatMap(q => q.cl && q.cl.kind3 ? [...(q.hidden ? [] : [subjOf(q)]), ...(q.oLat[0] && !q.cl.opro ? [q.oLat[0]] : [])] : q.S && !q.S.implied ? [q.lat[0]] : []));
+    const prons = seeded(Object.values(PRON_SHOW).filter(x => x !== want), [sp, ask]);
+    const choices = seeded(uniq([want, ...nouns.filter(x => x !== want).slice(0, 3), ...prons]).slice(0, 6), [sp, ask, 'c']);
+    return { type: 'casefn', skill: 'casefn', cid: 'g:casefn', words: st.words, stage: 4,
+      instr: `Who or what is the subject of ${p.vf}?`, prompt: { latin: st.latin, help: st.help },
+      fields: [{ label: `Subject of ${p.vf}`, choices }],
+      check: v => { const ok = v[0] === want; return { ok: [ok], hints: ok || !v[0] ? [] : [p.hidden ? `No nominative goes with ${p.vf}, so the subject is in the ending: ${ENDING_SAYS[p.pk]}.` : `The subject is nominative and matches the verb: ${want}.${p.oLat[0] && v[0] === p.oLat[0] ? ` ${p.oLat[0]} is accusative: the direct object.` : ''}`], notes: [] }; },
+      correct: `Subject of ${p.vf}: ${want}`, summary: `subject of ${p.vf}`, params: [sp, ask] };
+  }
   const offset = ask.p === 0 ? 0 : st.parts[0].lat.length + 1;
   if (ask.modify) {
     const nounWord = p.lat[ask.n], nouns = uniq(st.parts.flatMap(q => q.cl && q.cl.kind3 ? [q.cl.s.length === 1 ? q.sLat[0] : null, ...(q.cl.s.length > 1 ? [q.sLat[0], q.sLat[2]] : []), q.oLat[0]] : q.S && !q.S.implied ? [q.lat[0]] : []).filter(Boolean));
@@ -997,13 +1046,15 @@ export function caseFnAsks(sp) { // every question that can be asked about a sen
   st.parts.forEach((p, pi) => {
     if (p.cl.kind3) {
       const s0 = p.lat.indexOf(p.sLat[0]); if (s0 >= 0 && p.cl.s.length === 1) out.push({ p: pi, role: 'subj', w: s0 });
-      if (p.oLat.length) { out.push({ p: pi, role: 'obj', w: p.lat.indexOf(p.oLat[0]) }); if (p.oLat[1]) out.push({ p: pi, modify: true, w: p.lat.indexOf(p.oLat[1]), n: p.lat.indexOf(p.oLat[0]) }); }
+      if (p.cl.opro) out.push({ p: pi, role: 'obj', w: p.lat.indexOf(p.oLat[0]) });
+      if (p.oLat.length && !p.cl.opro) { out.push({ p: pi, role: 'obj', w: p.lat.indexOf(p.oLat[0]) }); if (p.oLat[1]) out.push({ p: pi, modify: true, w: p.lat.indexOf(p.oLat[1]), n: p.lat.indexOf(p.oLat[0]) }); }
       if (p.sLat[1] && p.cl.s.length === 1) out.push({ p: pi, modify: true, w: p.lat.indexOf(p.sLat[1]), n: p.lat.indexOf(p.sLat[0]) });
     } else if (p.cl && !p.S.implied && p.cl.s.length === 1) {
       out.push({ p: pi, role: 'subj', w: 0 });
       if (p.idx.a >= 0 && p.cl.k === 'adj') out.push({ p: pi, role: 'comp', w: p.idx.a });
     }
   });
+  if (stageOn(4)) st.parts.forEach((p, pi) => { if (!p.cl.kind3) return; out.push({ p: pi, pn: true, w: p.lat.indexOf(p.vf) }); out.push({ p: pi, subjof: true, w: p.lat.indexOf(p.vf) }); });
   // a word that appears twice in the sentence would be ambiguous: skip it
   const all = st.parts.flatMap(p => p.lat).map(letters);
   return out.filter(a => all.filter(t => t === letters(st.parts[a.p].lat[a.w])).length === 1 && (!a.modify || all.filter(t => t === letters(st.parts[a.p].lat[a.n])).length === 1));
@@ -1016,11 +1067,13 @@ export function pools3() {
   const verbs = DRILL_VERBS.filter(isOn);
   return { nouns, adjs, verbs, anim: nouns.filter(ANIM_SUBJ), persons: nouns.filter(n => n.person), things: nouns.filter(n => !n.person && !n.animal) };
 }
+const OBJ_PERSON = ['doceo', 'voco'];
 function objPool(vb, P, subj) {
-  const base = vb.tr === 'anim' ? P.anim : vb.tr === 'have' ? P.nouns.filter(n => !n.person) : P.nouns;
+  const base = OBJ_PERSON.includes(vb.id) ? P.persons : vb.tr === 'anim' ? P.anim : vb.tr === 'have' ? P.nouns.filter(n => !n.person) : P.nouns;
   return base.filter(n => !subj.includes(n.id));
 }
-function subjPool(vb, P) { return vb.tr === false ? (vb.id === 'habito' ? P.persons : P.anim) : vb.id === 'vexo' ? P.nouns : vb.tr === 'have' ? P.persons : P.anim; }
+const PERSON_SUBJ = ['doceo', 'voco', 'clamo', 'rideo', 'taceo', 'habito'];
+function subjPool(vb, P) { if (PERSON_SUBJ.includes(vb.id)) return P.persons; return vb.tr === false ? (vb.id === 'habito' ? P.persons : P.anim) : vb.id === 'vexo' ? P.nouns : vb.tr === 'have' ? P.persons : P.anim; }
 export function randomT(pick, P, opts = {}) {
   const tr = opts.k ? opts.k === 'tr' : coin(0.8);
   const vb = pick(P.verbs.filter(v => (v.tr !== false) === tr)) || pick(P.verbs);
@@ -1030,8 +1083,12 @@ export function randomT(pick, P, opts = {}) {
   if (coin(isTr ? 0.15 : 0.3) && P.persons.length > 1) { const a = pick(P.persons), b = pick(P.persons.filter(w => w.id !== a.id)); s = [a.id, b.id]; nums = coin(0.4) ? ['pl', 'pl'] : ['sg', 'sg']; sNum = 'pl'; }
   else { const n = pick(sp); s = [n.id]; if (coin(0.25)) { const a = pick(P.adjs.filter(x => fits(n, x))); if (a) sa = a.id; } }
   const tc = { k: isTr ? 'tr' : 'int', s, num: sNum, nums, sa, v: vb.id, neg: coin(opts.negP ?? 0.15) };
+  if (stageOn(4) && !opts.noHidden && coin(opts.hiddenP ?? 0.4)) { // Stage 4: the subject is in the verb (videmus, curritis, amat with no nominative)
+    const [pp, nn] = pickOne(PERSONS6); tc.s = []; tc.sa = null; tc.nums = undefined; tc.per = pp; tc.num = nn; if (pp !== 3 && coin(0.25)) tc.pro = true;
+  }
   if (isTr) {
-    const o = pick(objPool(vb, P, s)); tc.o = o.id; tc.onum = num();
+    if (stageOn(4) && vb.tr === 'anim' && coin(0.15)) { tc.opro = pickOne(['eum', 'eam', 'eos', 'eas']); tc.o = null; tc.onum = OPRO[tc.opro].num; tc.order = pickOne(['SOV', 'OSV']); return tc; }
+    const o = pick(objPool(vb, P, tc.s)); tc.o = o.id; tc.onum = num();
     if (coin(opts.oaP ?? 0.3)) { const a = pick(P.adjs.filter(x => fits(o, x) && x.id !== sa)); if (a) tc.oa = a.id; }
     tc.order = pickOne(['SOV', 'SOV', 'OSV', 'OSV', 'SVO']);
   }
@@ -1047,4 +1104,122 @@ export function randomSpec3(pick, P, twoP = 0.4) {
   }
   let c2, tries = 0; do { c2 = randomT(pick, P); tries++; } while (tries < 6 && c2.s.some(id => c1.s.includes(id)));
   return { c1, c2, conj: conj === 'et' && (c1.s.length > 1 || c2.s.length > 1) ? 'sed' : conj };
+}
+
+
+/* =============== Stage 4: the present tense =============== */
+const pkOf = (per, num) => per + num;
+const PN_ORDER = ['1sg', '2sg', '3sg', '1pl', '2pl', '3pl'];
+export const CONJ_NAME = { 1: '1st', 2: '2nd', 3: '3rd', 4: '4th' };
+// Person & number of a form (the homework's "person, number, and tense"; tense is present until Stage 6)
+export function gPnum(vid, per, num) {
+  const vb = W[vid], form = conjForm(vb, per, num), k = pkOf(per, num);
+  return {
+    type: 'pnum', skill: 'pnum', cid: 'g:pnum', words: [vid], stage: 4,
+    instr: 'Person and number?', prompt: { latin: form, sub: `(${vb.entry})` },
+    fields: [{ label: 'Person', choices: ['1st', '2nd', '3rd'] }, { label: 'Number', choices: ['singular', 'plural'] }],
+    check: v => {
+      const ok = [v[0] === ['', '1st', '2nd', '3rd'][per], v[1] === (num === 'sg' ? 'singular' : 'plural')], hints = [];
+      if (!ok.every(Boolean)) hints.push(`${form} ends in ${ENDING_SAYS[k]}: ${PN_LABEL[k]}.`);
+      return { ok, hints, notes: [] };
+    },
+    correct: `${form}: ${PN_LABEL[k]} (${PRON_SHOW[k]})`, summary: `${form}: person + number`, params: [vid, per, num],
+  };
+}
+// Translate one verb form into English (all three translations count: I walk / I am walking / I do walk)
+export function gVtrans(vid, per, num) {
+  const vb = W[vid], form = conjForm(vb, per, num), k = pkOf(per, num);
+  const accFor = (p, n) => { const out = []; for (const pr of PRON_EN[pkOf(p, n)]) for (const ve of vEnP(vb, p, n, false)) out.push(`${pr} ${ve}`); return enAns(out); };
+  const acc = accFor(per, num), others = PERSONS6.filter(([p, n]) => !(p === per && n === num));
+  const otherAcc = others.flatMap(([p, n]) => accFor(p, n));
+  return {
+    type: 'vtrans', skill: 'vtrans', cid: 'g:vtrans', words: [vid], stage: 4,
+    instr: 'Translate the verb. The subject is in the ending.', prompt: { latin: form },
+    fields: [{ label: 'English', ph: 'English' }],
+    check: v => {
+      const t = enKey(prenorm(v[0]));
+      if (acc.includes(t)) return { ok: [true], hints: [], notes: [] };
+      const fz = t && fuzzyEn(t, acc, otherAcc); if (fz) return { ok: [true], hints: [], notes: [`Spelled: ${fz}`] };
+      const hints = [];
+      if (t) {
+        const hit = others.find(([p, n]) => accFor(p, n).includes(t));
+        if (hit) hints.push(`${form} ends in ${ENDING_SAYS[k]}, not ${ENDING_SAYS[pkOf(...hit)].split(' = ')[0]}. "${PRON_SHOW[k]} ${vEnP(vb, per, num, false)[0]}"`);
+        else if (k === '2pl' && t.startsWith('you ') && !/^you (all|guys)/.test(t)) hints.push('-tis is plural "you": write "you all".');
+        else if (k === '3sg' && PRON_EN['3sg'].some(pr => vb.en.some(e => t === `${pr} ${e.pl}`))) hints.push(`he/she/it → the English verb takes -s: "${PRON_SHOW[k]} ${vEnP(vb, per, num, false)[0]}".`);
+        else hints.push(`${ENDING_SAYS[k]}. Start with the subject: "${PRON_SHOW[k]} …"`);
+      }
+      return { ok: [false], hints, notes: [] };
+    },
+    correct: `${form}: ${PRON_SHOW[k]} ${vEnP(vb, per, num, false)[0]}`, summary: form, params: [vid, per, num],
+  };
+}
+// English → tap the Latin form (her "translate into Latin" exercise, without writing Latin)
+export function gVpick(vid, per, num, style = 0) {
+  const vb = W[vid], k = pkOf(per, num), want = conjForm(vb, per, num);
+  const ve = vEnP(vb, per, num, false), phrase = ve[Math.min(style, ve.length - 1)];
+  const eng = `${PRON_SHOW[k] === 'he/she/it' ? pickStable(['he', 'she', 'it'], [vid, per, num]) : PRON_SHOW[k]} ${phrase}`;
+  const opts = seeded(uniq(PN_ORDER.map(x => conjForm(vb, Number(x[0]), x.slice(1)))), [vid, per, num, style]);
+  return {
+    type: 'vpick', skill: 'vpick', cid: 'g:vpick', words: [vid], stage: 4,
+    instr: 'Tap the Latin.', prompt: { eng: cap(eng) },
+    fields: [{ label: 'Latin', choices: opts }],
+    check: v => { const ok = v[0] === want; return { ok: [ok], hints: ok || !v[0] ? [] : [`"${PRON_SHOW[k]}" = ${ENDING_SAYS[k].split(' = ')[0]}: ${want}.`], notes: [] }; },
+    correct: `${cap(eng)} = ${want}`, summary: `${eng} → Latin`, params: [vid, per, num, style],
+  };
+}
+function pickStable(arr, seed) { return seeded(arr, seed)[0]; }
+// Conjugate it: tap each of the six forms (or: which conjugation is it?)
+export function gConj(vid, mode = 'all') {
+  const vb = W[vid];
+  if (mode === 'which') {
+    const want = CONJ_NAME[vb.conj];
+    return {
+      type: 'conj', skill: 'conj', cid: 'g:conj', words: [vid], stage: 4,
+      instr: 'Which conjugation? Look at the infinitive.', prompt: { latin: vb.entry.split(',').slice(0, 2).join(',') },
+      fields: [{ label: 'Conjugation', choices: ['1st', '2nd', '3rd', '4th'] }],
+      check: v => { const ok = v[0] === want; return { ok: [ok], hints: ok || !v[0] ? [] : [`${vb.inf} ends in ${({ 1: '-āre', 2: '-ēre', 3: '-ere', 4: '-īre' })[vb.conj]}: ${want} conjugation.`], notes: [] }; },
+      correct: `${vb.inf}: ${want} conjugation`, summary: `${vb.lemma}: conjugation`, params: [vid, mode],
+    };
+  }
+  const forms = PN_ORDER.map(x => conjForm(vb, Number(x[0]), x.slice(1)));
+  // Each box: the right form, the same person in the wrong conjugation pattern, and a neighbouring person's form.
+  const decoyConj = vb.conj === 3 ? 1 : 3, st = unmac(vb.inf).replace(/(are|ere|ire)$/, '');
+  const dv = { ...vb, conj: decoyConj, inf: st + (decoyConj === 1 ? 'are' : 'ere') };
+  const rowOpts = PN_ORDER.map((x, i) => { const wrongConj = i === 0 ? null : conjForm(dv, Number(x[0]), x.slice(1));
+    const neighbour = forms[(i + 1) % 6], o = uniq([forms[i], wrongConj, neighbour].filter(Boolean)).filter((f, j) => j === 0 || !forms.slice(0, 0).includes(f));
+    if (o.length < 3) o.push(forms[(i + 2) % 6]); return seeded(uniq(o).slice(0, 3), [vid, x]); });
+  return {
+    type: 'conj', skill: 'conj', cid: 'g:conj', words: [vid], stage: 4,
+    instr: 'Conjugate it in the present tense: tap the form for each box.', prompt: { latin: vb.entry.split(',').slice(0, 2).join(',') },
+    fields: PN_ORDER.map((x, i) => ({ label: PN_LABEL[x], choices: rowOpts[i] })),
+    check: v => {
+      const ok = forms.map((f, i) => v[i] === f), hints = [];
+      if (!ok.every(Boolean)) hints.push(`${CONJ_NAME[vb.conj]} conjugation: ${({ 1: 'linking vowel a (1st sg drops it: -o)', 2: 'linking vowel e, no irregularities', 3: 'linking vowel i (1st sg drops it, 3rd pl -unt)', 4: 'linking vowel i (3rd pl -iunt)' })[vb.conj]}.`);
+      return { ok, hints, notes: [] };
+    },
+    correct: forms.join(', '), summary: `Conjugate ${vb.lemma}`, params: [vid, mode],
+  };
+}
+CHARTS.push(
+  { id: 'pe', title: 'Present Tense Endings', stage: 4, opts: ['-o', '-s', '-t', '-mus', '-tis', '-nt'],
+    cells: [['1st singular (I)', '-o'], ['2nd singular (you)', '-s'], ['3rd singular (he/she/it)', '-t'], ['1st plural (we)', '-mus'], ['2nd plural (you all)', '-tis'], ['3rd plural (they)', '-nt']] },
+  { id: 'pv', title: 'Present Tense Linking Vowels', stage: 4, opts: ['a', 'e', 'i'],
+    cells: [['1st conjugation (amāre)', 'a'], ['2nd conjugation (habēre)', 'e'], ['3rd conjugation (cadere)', 'i'], ['4th conjugation (audīre)', 'i']] },
+);
+SKILLS.push(
+  { id: 'pnum', stage: 4, name: 'Person & number', desc: '-o, -s, -t, -mus, -tis, -nt' },
+  { id: 'vtrans', stage: 4, name: 'Translate the verb', desc: 'festinatis = you all hurry' },
+  { id: 'vpick', stage: 4, name: 'Pick the Latin verb', desc: '"We walk" → tap the form' },
+  { id: 'conj', stage: 4, name: 'Conjugate it', desc: 'All six forms, all four conjugations' },
+);
+SKILL.pnum = SKILLS.find(x => x.id === 'pnum'); SKILL.vtrans = SKILLS.find(x => x.id === 'vtrans'); SKILL.vpick = SKILLS.find(x => x.id === 'vpick'); SKILL.conj = SKILLS.find(x => x.id === 'conj');
+export const CONJ_VERBS = () => WORDS.filter(w => w.kind === 'vb' && isOn(w) && w.en && w.conj !== 'irr');
+export function makeSkillCard4(skillId, pick) {
+  const vb = pick(CONJ_VERBS()), [p, n] = pickOne(PERSONS6);
+  switch (skillId) {
+    case 'pnum': return gPnum(vb.id, p, n);
+    case 'vtrans': return gVtrans(vb.id, p, n);
+    case 'vpick': return gVpick(vb.id, p, n, pickOne([0, 0, 1, 2]));
+    case 'conj': return coin(0.3) ? gConj(vb.id, 'which') : gConj(vb.id);
+  }
 }
