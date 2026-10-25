@@ -1,5 +1,5 @@
 // Scheduling, streaks, ranks and the test-readiness light. Pure functions.
-import { WORDS, W } from './data.js';
+import { WORDS, W, inUnit, stageOn } from './data.js';
 import { SKILLS } from './gen.js';
 
 const DAY = 86400000;
@@ -127,8 +127,8 @@ export function nextQuiz(settings, today) {
   const q = qs[0]; return { ...q, day: dayFromISO(q.date), daysLeft: dayFromISO(q.date) - today };
 }
 // The vocab test covers only the current unit's words; grammar covers everything so far.
-export const quizWords = stage => WORDS.filter(w => w.stage === stage);
-export const quizSkills = stage => SKILLS.filter(s => s.stage <= stage);
+export const quizWords = stage => WORDS.filter(w => inUnit(w, stage));
+export const quizSkills = stage => SKILLS.filter(s => stageOn(s.stage) && s.stage <= stage);
 // covers: 'vocab' (this unit's words only), 'grammar' (all skills so far), or 'both' (older quiz entries).
 export const quizCovers = q => (q && q.covers) || 'both';
 export const COVERS_LABEL = { vocab: 'vocab', grammar: 'grammar', both: '' };

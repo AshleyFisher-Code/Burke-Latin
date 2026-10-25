@@ -1,6 +1,6 @@
 import { auth, db, doc, setDoc, onSnapshot, onAuthStateChanged, signInWithEmailAndPassword, signOut } from './firebase.js';
 import { STUDENT_UID, PARENT_UID, APP_VERSION } from './config.js';
-import { WORDS, W, STAGES, MAX_STAGE, STAGE_NAMES } from './data.js';
+import { WORDS, W, STAGES, MAX_STAGE, STAGE_NAMES, setUnits, unitsOf, isOn, inUnit, stageOn, curUnit } from './data.js';
 import { SKILLS, SKILL } from './gen.js';
 import { cardFromSpec, buildDaily, buildReview, buildLearn, buildUnit, buildTrouble, troubleWords, buildSkill, buildTestRun, buildMock, buildMastery, followUp, stageOf } from './session.js';
 import { dayNum, isoFromDay, dayFromISO, blankState, updateWord, updateSkill, touchWords, completeDay, streakView, rankFor, nextMilestone, milestones,
@@ -59,7 +59,7 @@ onAuthStateChanged(auth, u => {
   if (!u) { role = null; return renderLogin(); }
   role = u.uid === PARENT_UID ? 'parent' : u.uid === STUDENT_UID ? 'student' : 'other';
   if (role === 'other') return show(h('section', { class: 'card' }, h('h2', { text: 'This account isn\'t set up for Latin Practice.' }), h('button', { class: 'ghost', onclick: () => signOut(auth) }, 'Sign out')));
-  unsubs.push(onSnapshot(settingsDoc(), snap => { settings = snap.exists() ? snap.data() : {}; if (loadedOnce && !run) route(); }, e => console.error(e)));
+  unsubs.push(onSnapshot(settingsDoc(), snap => { settings = snap.exists() ? snap.data() : {}; setUnits(unitsOf(settings)); if (loadedOnce && !run) route(); }, e => console.error(e)));
   unsubs.push(onSnapshot(studentDoc(), snap => {
     if (run) return; // don't disturb an answer in progress
     const incoming = snap.exists() ? snap.data() : null;
@@ -128,9 +128,9 @@ function renderHome() {
   const name = settings.name || '';
   const cov = q ? quizCovers(q) : 'both';
   const daily = q && q.daysLeft <= 4 ? (cov === 'vocab' ? 'Vocab quiz prep' : cov === 'grammar' ? 'Grammar quiz prep' : 'Quiz prep') : isMasteryDay(S) ? 'Mastery Check' : "Today's practice";
-  const dueN = WORDS.filter(w => w.stage <= stageOf(settings) && S.words[w.id] && S.words[w.id].seen && S.words[w.id].due <= t).length;
+  const dueN = WORDS.filter(w => isOn(w) && S.words[w.id] && S.words[w.id].seen && S.words[w.id].due <= t).length;
   const shaky = troubleWords(S, settings).length;
-  const weak = SKILLS.filter(s => s.stage <= stageOf(settings) && skillStatus(S, s.id).level !== 'good').length;
+  const weak = SKILLS.filter(s => stageOn(s.stage) && skillStatus(S, s.id).level !== 'good').length;
   show(
     h('div', { class: 'top' }, h('h1', { text: `Salvē${name ? ', ' + name : ''}!` }), role === 'parent' ? h('button', { class: 'back', onclick: () => go('parent') }, 'Parent view') : null),
     preview ? h('p', { class: 'chip gold', text: 'Preview of Burke\'s home' }) : null,
@@ -139,7 +139,7 @@ function renderHome() {
     v.done ? h('button', { class: 'btn done', onclick: () => start(buildDaily(S, settings, t, q)) }, h('b', { text: `${daily} done ✓` }), h('span', { text: 'Want more? Run another round (streak already counted).' }))
       : h('button', { class: 'btn hero', onclick: () => start(buildDaily(S, settings, t, q)) }, h('b', { text: `Start ${daily.toLowerCase().replace("today's", "today's")}` }),
         h('span', { text: daily === 'Mastery Check' ? 'Every 10th day: a no-hints check of your whole word bank · about 10 min' : daily === 'Vocab quiz prep' ? `Unit ${q.stage} words only, no grammar · about 10 min` : daily === 'Grammar quiz prep' ? 'Weak grammar first + a few review words · about 12 min' : daily === 'Quiz prep' ? 'Unconfirmed quiz words + weak grammar · about 12 min' : 'About 25 cards · 10–12 min' })),
-    (() => { const st = stageOf(settings), n = WORDS.filter(w => w.stage === st).length; return h('button', { class: 'btn', onclick: () => start(buildUnit(st)) }, h('b', { text: `Unit ${st} vocab review` }), h('span', { text: v.done ? `All ${n} Unit ${st} words · streak already counted today` : `All ${n} Unit ${st} words · finishing it counts for today's streak` })); })(),
+    (() => { const st = stageOf(settings), n = WORDS.filter(w => inUnit(w, st)).length; return h('button', { class: 'btn', onclick: () => start(buildUnit(st)) }, h('b', { text: `Unit ${st} vocab review` }), h('span', { text: v.done ? `All ${n} Unit ${st} words · streak already counted today` : `All ${n} Unit ${st} words · finishing it counts for today's streak` })); })(),
     streakCard(),
     h('div', { class: 'tiles' },
       h('button', { class: 'tile', onclick: () => go('vocab') }, h('b', { text: 'Vocab' }), h('span', { text: `${dueN} due · ${shaky} shaky` })),
@@ -152,7 +152,7 @@ function renderHome() {
 function backBar(title) { return h('div', { class: 'top' }, h('button', { class: 'back', onclick: () => go('home') }, '‹ Home'), h('span', { class: 'eyebrow', text: title })); }
 function statusCounts(stageMax) {
   const c = { new: 0, learning: 0, known: 0, mastered: 0, slipped: 0 };
-  WORDS.filter(w => w.stage <= stageMax).forEach(w => c[wordStatus(S.words[w.id])]++); return c;
+  WORDS.filter(w => isOn(w)).forEach(w => c[wordStatus(S.words[w.id])]++); return c;
 }
 function renderVocab() {
   const t = today(), st = stageOf(settings);
@@ -160,22 +160,22 @@ function renderVocab() {
   show(backBar('Vocab'), h('h1', { text: 'Vocab' }),
     h('section', { class: 'card' }, h('div', { class: 'statgrid' }, ['mastered', 'known', 'learning', 'slipped', 'new'].map(k => h('div', { class: 'stat' }, h('b', { text: c[k] }), h('span', { text: STATUS_LABEL[k] }))))),
     h('button', { class: 'btn', disabled: !due, onclick: () => start(buildReview(S, settings, t)) }, h('b', { text: 'Review' }), h('span', { text: due ? `${due} words due` : 'Nothing due right now' })),
-    STAGES.filter(s => s <= st).slice().reverse().map(s => h('button', { class: 'btn', onclick: () => start(buildLearn(s)) }, h('b', { text: `Learn Stage ${s}` }), h('span', { text: `All ${WORDS.filter(w => w.stage === s).length} words, both directions` }))),
+    STAGES.filter(stageOn).slice().reverse().map(s => h('button', { class: 'btn', onclick: () => start(buildLearn(s)) }, h('b', { text: `Learn Stage ${s}` }), h('span', { text: `All ${WORDS.filter(w => inUnit(w, s)).length} words, both directions` }))),
     h('button', { class: 'btn', disabled: !trouble, onclick: () => start(buildTrouble(S, settings)) }, h('b', { text: 'Trouble words' }), h('span', { text: trouble ? `${trouble} words you keep missing` : 'None right now' })),
     h('button', { class: 'btn', onclick: () => go('browse') }, h('b', { text: 'Browse all words' }), h('span', { text: 'Every word with its status' })));
 }
 function renderBrowse() {
   show(h('div', { class: 'top' }, h('button', { class: 'back', onclick: () => go('vocab') }, '‹ Vocab'), h('span', { class: 'eyebrow', text: 'All words' })),
     h('div', { class: 'legend' }, ['mastered', 'known', 'learning', 'slipped', 'new'].map(k => h('span', {}, h('i', { class: 'dot ' + k }), STATUS_LABEL[k]))),
-    STAGES.slice().reverse().map(s => h('section', { class: 'card' }, h('h2', { text: `Stage ${s}` }),
-      h('ul', { class: 'list' }, WORDS.filter(w => w.stage === s).map(w => { const k = wordStatus(S.words[w.id]); return h('li', {}, h('i', { class: 'dot ' + k, title: STATUS_LABEL[k] }), h('div', {}, h('b', { text: w.kind === 'v' ? `${w.lemma}/${w.pair}` : w.kind === 'x' ? w.lemma : w.entry }), ': ', w.show)); })))));
+    STAGES.filter(stageOn).slice().reverse().map(s => h('section', { class: 'card' }, h('h2', { text: `Stage ${s}` }),
+      h('ul', { class: 'list' }, WORDS.filter(w => inUnit(w, s)).map(w => { const k = wordStatus(S.words[w.id]); return h('li', {}, h('i', { class: 'dot ' + k, title: STATUS_LABEL[k] }), h('div', {}, h('b', { text: w.kind === 'v' ? `${w.lemma}/${w.pair}` : w.kind === 'x' ? w.lemma : w.entry }), ': ', w.show)); })))));
 }
 
 /* ---------- grammar ---------- */
 function renderGrammar() {
   const st = stageOf(settings);
   show(backBar('Grammar'), h('h1', { text: 'Grammar' }),
-    STAGES.filter(s => s <= st).slice().reverse().map(s => h('section', { class: 'card' }, h('h2', { text: STAGE_NAMES[s] || `Stage ${s}` }),
+    STAGES.filter(s => stageOn(s) && SKILLS.some(k => k.stage === s)).slice().reverse().map(s => h('section', { class: 'card' }, h('h2', { text: STAGE_NAMES[s] || `Stage ${s}` }),
       SKILLS.filter(k => k.stage === s).map(k => { const ss = skillStatus(S, k.id); return h('button', { class: 'skill', onclick: () => start(buildSkill(S, settings, k.id)) },
         h('div', { class: 'spread' }, h('b', { text: k.name }), h('span', { class: 'pill ' + ss.level, text: ss.acc == null ? ss.label : `${ss.label} · ${pct(ss.acc)}` })),
         h('span', { class: 'small muted', text: k.desc })); }))));
@@ -242,7 +242,9 @@ function renderRun() {
 function choiceGroup(f, i, onPick) {
   let sel = '', ro = false;
   const long = f.choices.some(x => x.length > 14);
-  const box = h('div', { class: 'choices' + (long ? ' long' : ''), id: 'f' + i, role: 'group' });
+  // 4 medium-length choices (currere, lupos…) sit in a 2×2 grid so words never break mid-word
+  const grid = !long && (f.choices.length >= 4 ? f.choices.some(x => x.length > 5) : f.choices.length === 3 && f.choices.some(x => x.length > 8));
+  const box = h('div', { class: 'choices' + (long ? ' long' : grid ? ' grid' : ''), id: 'f' + i, role: 'group' });
   const btns = f.choices.map(x => h('button', { type: 'button', class: 'opt', text: x, onclick: () => { if (ro) return; box.value = x; box.classList.remove('bad'); onPick(); } }));
   box.append(...btns);
   Object.defineProperty(box, 'value', { get: () => sel, set: v => { sel = v; btns.forEach(b => b.classList.toggle('sel', b.textContent === sel)); } });
@@ -355,8 +357,8 @@ function renderParent() {
   const log = S.log || [];
   const practicedDays = new Set(log.filter(l => ['daily', 'mastery', 'quizprep', 'unit'].includes(l.mode)).map(l => l.day));
   const c = statusCounts(MAX_STAGE);
-  const slipped = WORDS.filter(w => wordStatus(S.words[w.id]) === 'slipped');
-  const trouble = troubleWords(S, { currentStage: MAX_STAGE }).filter(w => !slipped.includes(w));
+  const slipped = WORDS.filter(w => isOn(w) && wordStatus(S.words[w.id]) === 'slipped');
+  const trouble = troubleWords(S, settings).filter(w => !slipped.includes(w));
   const lastLog = log[log.length - 1];
   show(
     h('div', { class: 'top' }, h('h1', { text: 'Parent view' }), h('button', { class: 'linkbtn', onclick: () => signOut(auth) }, 'Sign out')),
@@ -369,7 +371,7 @@ function renderParent() {
       h('div', { class: 'statgrid' }, ['mastered', 'known', 'learning', 'slipped', 'new'].map(k => h('div', { class: 'stat' }, h('b', { text: c[k] }), h('span', { text: STATUS_LABEL[k] })))),
       slipped.length ? h('div', {}, h('div', { class: 'eyebrow', text: 'Slipped (used to know)' }), h('p', { text: slipped.map(w => w.lemma).join(', ') })) : null,
       trouble.length ? h('div', {}, h('div', { class: 'eyebrow', text: 'Shaky' }), h('p', { text: trouble.map(w => w.lemma).join(', ') })) : null),
-    h('section', { class: 'card' }, h('h2', { text: 'Grammar' }), h('ul', { class: 'list' }, SKILLS.map(k => { const ss = skillStatus(S, k.id); return h('li', {}, h('span', { class: 'pill ' + ss.level, text: ss.acc == null ? '—' : pct(ss.acc) }), h('div', { text: `Stage ${k.stage} · ${k.name}` })); }))),
+    h('section', { class: 'card' }, h('h2', { text: 'Grammar' }), h('ul', { class: 'list' }, SKILLS.filter(k => stageOn(k.stage)).map(k => { const ss = skillStatus(S, k.id); return h('li', {}, h('span', { class: 'pill ' + ss.level, text: ss.acc == null ? '—' : pct(ss.acc) }), h('div', { text: `Stage ${k.stage} · ${k.name}` })); }))),
     (S.mocks || []).length ? h('section', { class: 'card' }, h('h2', { text: 'Mock quizzes' }), h('ul', { class: 'list' }, S.mocks.slice().reverse().slice(0, 10).map(m => h('li', {}, h('span', { class: 'pill ' + mockPill(m), text: mockLine(m) }), h('div', { text: mockLabel(m) }))))) : null,
     settingsCard(),
     h('section', { class: 'card' }, h('h2', { text: 'Backup' }), h('p', { class: 'small muted', text: 'Saves a copy of all progress to this device. Once a month is plenty.' }),
@@ -381,22 +383,25 @@ function settingsCard() {
   const s = JSON.parse(JSON.stringify(settings || {}));
   s.quizzes = s.quizzes || []; s.rewards = s.rewards || {};
   const name = h('input', { type: 'text', id: 'set-name', value: s.name || '', placeholder: 'Burke' });
-  const stage = h('select', { id: 'set-stage' }, STAGES.map(x => h('option', { value: x, selected: (s.currentStage || MAX_STAGE) == x }, `Stage ${x}`)));
+  const on = unitsOf(s);
+  const unitBoxes = STAGES.map(x => ({ x, el: h('input', { type: 'checkbox', id: 'unit-' + x, checked: on.includes(x) }) }));
   const qDate = h('input', { type: 'date', id: 'q-date' });
-  const qStage = h('select', { id: 'q-stage' }, STAGES.map(x => h('option', { value: x, selected: x === MAX_STAGE }, `Stage ${x}`)));
+  const qStage = h('select', { id: 'q-stage' }, STAGES.map(x => h('option', { value: x, selected: x === curUnit() }, `Stage ${x}`)));
   const COV = [['vocab', 'Vocab only'], ['grammar', 'Grammar only'], ['both', 'Vocab + grammar']];
   const covSel = (val, id) => h('select', { id }, COV.map(([v, l]) => h('option', { value: v, selected: v === val }, l)));
   const qCov = covSel('vocab', 'q-cov');
   const msg = h('p', { class: 'small muted', hidden: true });
   const rewardInputs = milestones(0).slice(0, 9).map(m => ({ m, el: h('input', { type: 'text', id: 'rw-' + m.days, value: s.rewards[m.days] || '', placeholder: 'e.g. pick Friday dinner' }) }));
   const persist = async () => {
-    s.name = name.value.trim(); s.currentStage = Number(stage.value);
+    s.name = name.value.trim();
+    const picked = unitBoxes.filter(u => u.el.checked).map(u => u.x); s.units = picked.length ? picked : [1]; s.currentStage = Math.max(...s.units); setUnits(s.units);
     rewardInputs.forEach(({ m, el }) => { const v = el.value.trim(); if (v) s.rewards[m.days] = v; else delete s.rewards[m.days]; });
     try { await setDoc(settingsDoc(), s); msg.hidden = false; msg.textContent = 'Saved.'; } catch (e) { msg.hidden = false; msg.textContent = 'Couldn\'t save: ' + (e.code || e.message); }
   };
   return h('section', { class: 'card' }, h('h2', { text: 'Settings' }),
     h('label', { class: 'f' }, 'His name (shown on his home screen)', name),
-    h('label', { class: 'f' }, 'Current stage in class', stage),
+    h('div', {}, h('div', { class: 'eyebrow', text: 'Units he has done or is doing' }), h('p', { class: 'small muted', text: 'Only ticked units show up in his practice. The highest ticked unit is his current unit (Unit vocab button and vocab mock quiz).' }),
+      h('div', { class: 'checks' }, unitBoxes.map(({ x, el }) => h('label', { class: 'check' }, el, h('span', { text: STAGE_NAMES[x] || `Stage ${x}` }))))),
     h('div', {}, h('div', { class: 'eyebrow', text: 'Quiz dates' }),
       s.quizzes.length ? h('ul', { class: 'list' }, s.quizzes.slice().sort((a, b) => a.date.localeCompare(b.date)).map(q => h('li', {}, h('div', {}, h('div', { text: `Stage ${q.stage} · ${fmtDate(q.date)}` }), (() => { const sel = covSel(quizCovers(q)); sel.style.marginTop = '4px'; sel.onchange = () => { q.covers = sel.value; settings = s; persist().then(route); }; return sel; })()), h('button', { class: 'linkbtn', onclick: () => { s.quizzes = s.quizzes.filter(x => x !== q); settings = s; persist().then(route); } }, 'Remove')))) : h('p', { class: 'small muted', text: 'None yet.' }),
       h('div', { class: 'fields', style: 'margin-top:8px' }, h('label', { class: 'f' }, 'Date', qDate), h('label', { class: 'f' }, 'Stage', qStage), h('label', { class: 'f' }, 'Type', qCov)),

@@ -149,3 +149,9 @@ ul.list li>div{min-width:0;overflow-wrap:anywhere;flex:1}
 /* iOS draws date inputs wider than their box; keep them inside the card */
 input[type=date]{-webkit-appearance:none;appearance:none;display:block;max-width:100%;min-height:52px;line-height:1.2}
 input[type=date]::-webkit-date-and-time-value{text-align:left}
+
+.checks{display:flex;flex-direction:column;gap:6px;margin-top:6px}
+.check{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font-size:16px;cursor:pointer}
+.check input{width:22px;height:22px;flex:0 0 auto;accent-color:var(--accent)}
+.choices.grid{display:grid;grid-template-columns:1fr 1fr}
+.choices.grid button.opt{overflow-wrap:normal}

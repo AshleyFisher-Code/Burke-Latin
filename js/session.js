@@ -1,10 +1,10 @@
 // Builds practice sessions as lists of small, saveable "specs", and turns specs back into cards.
-import { WORDS, W, MAX_STAGE } from './data.js';
-import { vocabL2E, vocabPick, pickOpts, gNID, gChart, gAgree, gPhrase, gFixPhrase, gVnum, gSV, gComp, gRole, gTrans, gFixSent, gTrans2, gFix2, randomSpec2, poolsFor, fix2Errors,
+import { WORDS, W, MAX_STAGE, setUnits, unitsOf, curUnit, isOn, inUnit, stageOn } from './data.js';
+import { vocabL2E, vocabPick, pickOpts, gNID, gChart, gAgree, gPhrase, gFixPhrase, gVnum, gSV, gComp, gRole, gTrans, gFixSent, gTrans2, gFix2, randomSpec2, poolsFor, fix2Errors, gCase, gDecline, gObjForm, gCaseFn, gDobj, caseFnAsks, randomSpec3, pools3,
   makeSkillCard, SKILLS, SKILL, CHARTS, shuffle, pickOne, PL_NOUNS, randomSentenceSpec, PHRASE_ADJS, PERSONS, NOUNS, COMP_ADJS } from './gen.js';
 import { wordStatus, skillAcc, quizWords, quizSkills, isMasteryDay, quizCovers } from './srs.js';
 
-const BUILD = { nid: gNID, chart: gChart, agree: gAgree, phrase: gPhrase, fixphrase: gFixPhrase, vnum: gVnum, sv: gSV, comp: gComp, role: gRole, trans: gTrans, fixsent: gFixSent, trans2: gTrans2, fix2: gFix2 };
+const BUILD = { nid: gNID, chart: gChart, agree: gAgree, phrase: gPhrase, fixphrase: gFixPhrase, vnum: gVnum, sv: gSV, comp: gComp, role: gRole, trans: gTrans, fixsent: gFixSent, trans2: gTrans2, fix2: gFix2, case: gCase, decline: gDecline, objform: gObjForm, casefn: gCaseFn, dobj: gDobj };
 export function cardFromSpec(sp) {
   let c;
   // He only ever reads Latin and answers in English. Old saved English→Latin cards are shown as Latin→English.
@@ -23,11 +23,12 @@ export function makePicker(state) {
   const age = id => { const w = state.words[id]; if (!w) return -1e9; return Math.max(w.ctx ?? -1e9, w.last ?? -1e9); };
   return list => { if (!list.length) return undefined; const s = list.slice().sort((a, b) => age(a.id) - age(b.id)); const k = Math.max(2, Math.ceil(s.length / 3)); return pickOne(s.slice(0, k)); };
 }
-export const stageOf = settings => Math.min(MAX_STAGE, (settings && settings.currentStage) || MAX_STAGE);
+// The parent ticks which units are on; the highest ticked one is the current unit.
+export const stageOf = settings => { setUnits(unitsOf(settings)); return curUnit(); };
 function dirFor() { return 'l2e'; }
 function skillCards(state, settings, n, stageCap, focusStage) {
   const pick = makePicker(state);
-  const skills = SKILLS.filter(s => s.stage <= stageCap);
+  const skills = SKILLS.filter(s => stageOn(s.stage) && s.stage <= stageCap);
   // weakest first; not-started skills of the current stage count as weak
   const score = s => { const a = skillAcc(state, s.id); return a == null ? (s.stage === focusStage ? -1 : 0.5) : a; };
   const ranked = skills.slice().sort((a, b) => score(a) - score(b));
@@ -41,12 +42,12 @@ export function buildDaily(state, settings, today, quiz) {
   const stage = stageOf(settings);
   if (quiz && quiz.daysLeft <= 4 && quiz.daysLeft >= 0) return buildQuizPrep(state, settings, today, quiz);
   if (isMasteryDay(state) && state.streak.last !== today) return buildMastery(state, today, stage);
-  const bank = WORDS.filter(w => w.stage <= stage);
+  const bank = WORDS.filter(w => isOn(w) && w.stage <= stage);
   const due = bank.filter(w => state.words[w.id] && state.words[w.id].seen && state.words[w.id].due <= today)
     .sort((a, b) => state.words[a.id].due - state.words[b.id].due || state.words[a.id].lvl - state.words[b.id].lvl);
   const picked = due.slice(0, 16);
   const unseen = bank.filter(w => !state.words[w.id] || !state.words[w.id].seen).sort((a, b) => b.stage - a.stage);
-  const newOnes = shuffle(unseen.filter(w => w.stage === stage)).concat(shuffle(unseen.filter(w => w.stage !== stage))).slice(0, Math.max(0, Math.min(8, 20 - picked.length)));
+  const newOnes = shuffle(unseen.filter(w => inUnit(w, stage))).concat(shuffle(unseen.filter(w => !inUnit(w, stage)))).slice(0, Math.max(0, Math.min(8, 20 - picked.length)));
   let vocab = picked.concat(newOnes);
   if (vocab.length < 20) {
     const rest = bank.filter(w => !vocab.includes(w)).sort((a, b) => ((state.words[a.id] || {}).last ?? -1e9) - ((state.words[b.id] || {}).last ?? -1e9));
@@ -59,7 +60,7 @@ export function buildDaily(state, settings, today, quiz) {
 function interleave(a, b) { const out = shuffle(a); b.forEach((x, i) => out.splice(Math.min(out.length, Math.round((i + 1) * out.length / (b.length + 1)) + i), 0, x)); return out; }
 
 export function buildMastery(state, today, stage) {
-  const bank = WORDS.filter(w => w.stage <= stage);
+  const bank = WORDS.filter(w => isOn(w) && w.stage <= stage);
   const known = shuffle(bank.filter(w => ['known', 'mastered', 'slipped'].includes(wordStatus(state.words[w.id]))));
   const others = shuffle(bank.filter(w => !known.includes(w)));
   const list = known.concat(others).slice(0, 30);
@@ -68,7 +69,7 @@ export function buildMastery(state, today, stage) {
 }
 export function buildQuizPrep(state, settings, today, quiz) {
   const cov = quizCovers(quiz), winStart = quiz.day - 4;
-  const due = (excl = []) => WORDS.filter(w => w.stage <= quiz.stage && !excl.includes(w) && state.words[w.id] && state.words[w.id].seen && state.words[w.id].due <= today);
+  const due = (excl = []) => WORDS.filter(w => isOn(w) && w.stage <= quiz.stage && !excl.includes(w) && state.words[w.id] && state.words[w.id].seen && state.words[w.id].due <= today);
   if (cov === 'grammar') { // grammar week: weak skills first, a few due words so older vocab doesn't slip
     const g = skillCards(state, settings, 14, quiz.stage, quiz.stage);
     const v = shuffle(due()).slice(0, 6).map(w => vocabSpec(w.id, 'l2e'));
@@ -92,23 +93,23 @@ export function buildQuizPrep(state, settings, today, quiz) {
 /* ---------- Vocab page ---------- */
 export function buildReview(state, settings, today) {
   const stage = stageOf(settings);
-  const due = WORDS.filter(w => w.stage <= stage && state.words[w.id] && state.words[w.id].seen && state.words[w.id].due <= today)
+  const due = WORDS.filter(w => isOn(w) && w.stage <= stage && state.words[w.id] && state.words[w.id].seen && state.words[w.id].due <= today)
     .sort((a, b) => state.words[a.id].due - state.words[b.id].due).slice(0, 25);
   return { mode: 'review', title: 'Vocab review', specs: due.map(w => vocabSpec(w.id, dirFor(state.words[w.id]))) };
 }
 // Every word in the unit once (type the meaning). Finishing it counts for the day's streak.
 export function buildUnit(stage) {
-  return { mode: 'unit', title: `Unit ${stage} vocab review`, counts: true, specs: shuffle(WORDS.filter(w => w.stage === stage)).map(w => vocabSpec(w.id, 'l2e')) };
+  return { mode: 'unit', title: `Unit ${stage} vocab review`, counts: true, specs: shuffle(WORDS.filter(w => inUnit(w, stage))).map(w => vocabSpec(w.id, 'l2e')) };
 }
 export function buildLearn(stage) {
-  const ws = WORDS.filter(w => w.stage === stage);
+  const ws = WORDS.filter(w => inUnit(w, stage));
   const a = shuffle(ws).map(w => pickSpec(w.id)); // first see it: tap the meaning
   const b = shuffle(ws).map(w => vocabSpec(w.id, 'l2e')); // then type the meaning
   return { mode: 'learn', title: `Learn Stage ${stage}`, specs: a.concat(b) };
 }
 export function troubleWords(state, settings) {
   const stage = stageOf(settings);
-  return WORDS.filter(w => w.stage <= stage).filter(w => { const s = state.words[w.id]; return s && s.seen && (s.slipped != null || (s.wrong >= 2 && s.lvl <= 3) || (s.wrong >= 1 && s.lvl <= 1)); })
+  return WORDS.filter(w => isOn(w) && w.stage <= stage).filter(w => { const s = state.words[w.id]; return s && s.seen && (s.slipped != null || (s.wrong >= 2 && s.lvl <= 3) || (s.wrong >= 1 && s.lvl <= 1)); })
     .sort((a, b) => (state.words[b.id].wrong - state.words[b.id].right) - (state.words[a.id].wrong - state.words[a.id].right));
 }
 export function buildTrouble(state, settings) {
@@ -135,16 +136,16 @@ export function followUp(sp, state, settings) {
 /* ---------- Test Prep ---------- */
 export function buildTestRun(state, settings, stage, covers = 'both') {
   const pick = makePicker(state);
-  if (covers === 'vocab') { const unit = WORDS.filter(w => w.stage === stage); const shakyU = unit.filter(w => { const s = state.words[w.id]; return !s || !s.seen || s.lvl <= 2 || s.slipped != null; });
+  if (covers === 'vocab') { const unit = WORDS.filter(w => inUnit(w, stage)); const shakyU = unit.filter(w => { const s = state.words[w.id]; return !s || !s.seen || s.lvl <= 2 || s.slipped != null; });
     return { mode: 'testrun', title: 'Vocab Test Run', test: true, specs: shuffle(shakyU).concat(shuffle(unit.filter(w => !shakyU.includes(w)))).slice(0, 10).map(w => vocabSpec(w.id, 'l2e')) }; }
-  if (covers === 'grammar') { const sk = SKILLS.filter(s => s.stage <= stage).sort((a, b) => (skillAcc(state, a.id) ?? 0) - (skillAcc(state, b.id) ?? 0));
+  if (covers === 'grammar') { const sk = SKILLS.filter(s => stageOn(s.stage) && s.stage <= stage).sort((a, b) => (skillAcc(state, a.id) ?? 0) - (skillAcc(state, b.id) ?? 0));
     const specs = []; for (let i = 0; i < 10; i++) specs.push(gSpec(makeSkillCard(sk[i % Math.min(sk.length, 6)].id, pick, stage)));
     return { mode: 'testrun', title: 'Grammar Test Run', test: true, specs: shuffle(specs) }; }
-  const bank = WORDS.filter(w => w.stage <= stage);
+  const bank = WORDS.filter(w => isOn(w) && w.stage <= stage);
   const shaky = bank.filter(w => { const s = state.words[w.id]; return s && s.seen && (s.lvl <= 2 || s.slipped != null); });
   const vocabPool = shuffle(shaky).concat(shuffle(bank.filter(w => !shaky.includes(w))));
   const specs = vocabPool.slice(0, 6).map(w => vocabSpec(w.id, 'l2e'));
-  const skills = SKILLS.filter(s => s.stage <= stage).sort((a, b) => (skillAcc(state, a.id) ?? 0) - (skillAcc(state, b.id) ?? 0)).slice(0, 4);
+  const skills = SKILLS.filter(s => stageOn(s.stage) && s.stage <= stage).sort((a, b) => (skillAcc(state, a.id) ?? 0) - (skillAcc(state, b.id) ?? 0)).slice(0, 4);
   skills.forEach(s => specs.push(gSpec(makeSkillCard(s.id, pick, stage))));
   return { mode: 'testrun', title: 'Test Run', test: true, specs: shuffle(specs) };
 }
@@ -152,20 +153,32 @@ export function buildTestRun(state, settings, stage, covers = 'both') {
 export function buildMock(state, settings, stage, covers = 'both') {
   const pick = makePicker(state);
   if (covers === 'vocab') { // this unit's words only, like the real vocab quiz
-    const unit = shuffle(WORDS.filter(w => w.stage === stage && w.kind !== 'x')).slice(0, 12).concat(shuffle(WORDS.filter(w => w.stage === stage && w.kind === 'x')).slice(0, 3));
+    const unit = shuffle(WORDS.filter(w => inUnit(w, stage) && w.kind !== 'x')).slice(0, 12).concat(shuffle(WORDS.filter(w => inUnit(w, stage) && w.kind === 'x')).slice(0, 3));
     return { mode: 'mock', kind: 'vocab', title: `Vocab mock quiz · Unit ${stage}`, test: true, stage, sections: [{ name: 'Vocabulary: meaning + middle stuff' }],
       specs: shuffle(unit).map(w => ({ ...vocabSpec(w.id, 'l2e'), sec: 0, pts: 1 })) };
   }
   // Vocab section: this unit's words only (like the real test). Grammar sections below use every word so far.
-  const cur = shuffle(WORDS.filter(w => w.stage === stage && w.kind !== 'x'));
-  const misc = shuffle(WORDS.filter(w => w.stage === stage && w.kind === 'x'));
+  const cur = shuffle(WORDS.filter(w => inUnit(w, stage) && w.kind !== 'x'));
+  const misc = shuffle(WORDS.filter(w => inUnit(w, stage) && w.kind === 'x'));
   const vocab = cur.slice(0, 8).concat(misc.slice(0, 2));
   const sections = [];
   sections.push({ name: 'I. Vocabulary', pts: 1, specs: shuffle(vocab).map(w => vocabSpec(w.id, 'l2e')) });
+  if (stage >= 3) { // Stage 3 quiz: decline, case & function, charts, translate (30 points with vocab, 20 without)
+    const nouns3 = shuffle(PL_NOUNS.filter(w => isOn(w) && w.stage <= stage)).slice(0, 4);
+    sections.push({ name: 'II. Decline the nouns', pts: 1, specs: nouns3.map((w, i) => ({ t: 'g', type: 'decline', params: [w.id, i % 2 ? 'pl' : 'sg', i < 2 ? 'acc' : (Math.random() < 0.5 ? 'acc' : 'nom')], skill: 'case' })) });
+    const cf = []; while (cf.length < 4) cf.push(gSpec(makeSkillCard('casefn', pick, stage)));
+    sections.push({ name: 'III. Case and function', pts: 1, specs: cf });
+    sections.push({ name: 'IV. Charts', pts: 1, specs: CHARTS.filter(c => c.stage === 3).map(c => ({ t: 'g', type: 'chart', params: [c.id], skill: 'charts' })) });
+    const P = pools3(), tr = []; for (let i = 0; i < 5; i++) tr.push(gSpec(gDobj(randomSpec3(pick, P, i < 2 ? 0.8 : 0.3))));
+    sections.push({ name: 'V. Translating (2 points each)', pts: 2, specs: tr });
+    if (covers === 'grammar') sections.shift();
+    const specs = []; sections.forEach((s, si) => s.specs.forEach(sp => specs.push({ ...sp, sec: si, pts: s.pts })));
+    return { mode: 'mock', kind: covers, title: covers === 'grammar' ? `Grammar mock quiz · Stage ${stage}` : `Mock quiz · Stage ${stage}`, test: true, stage, sections: sections.map(s => ({ name: s.name })), specs };
+  }
   if (stage >= 2) {
     const fx = [];
     for (let i = 0; i < 1; i++) {
-      const spec = randomSentenceSpec(pick, PL_NOUNS.filter(w => w.stage <= stage), COMP_ADJS.filter(w => w.stage <= stage && w.phrase), PERSONS.filter(w => w.stage <= stage), true);
+      const spec = randomSentenceSpec(pick, PL_NOUNS.filter(w => isOn(w) && w.stage <= stage), COMP_ADJS.filter(w => isOn(w) && w.stage <= stage && w.phrase), PERSONS.filter(w => isOn(w) && w.stage <= stage), true);
       const err = spec.k === 'adj' ? pickOne(['verb', 'adj-g', 'adj-n']) : 'verb';
       fx.push({ t: 'g', type: 'fixsent', params: [spec, err], skill: 'fixsent' }, { t: 'g', type: 'trans', params: [spec], skill: 'trans', afterFix: true });
     }
@@ -178,10 +191,10 @@ export function buildMock(state, settings, stage, covers = 'both') {
     const fx = []; for (let i = 0; i < 4; i++) fx.push(gSpec(makeSkillCard('fixphrase', pick, stage)));
     sections.push({ name: 'II. Fix the phrase', pts: 1, specs: fx });
   }
-  const nouns = shuffle(PL_NOUNS.filter(w => w.stage <= stage));
+  const nouns = shuffle(PL_NOUNS.filter(w => isOn(w) && w.stage <= stage));
   const trapFirst = nouns.filter(w => w.trap).slice(0, 1).concat(nouns.filter(w => !w.trap)).slice(0, 4);
   sections.push({ name: 'III. Noun identification', pts: 1.5, specs: trapFirst.map(w => ({ t: 'g', type: 'nid', params: [w.id, Math.random() < 0.5 ? 'sg' : 'pl'], skill: 'nid' })) });
-  sections.push({ name: 'IV. Charts', pts: 1, specs: CHARTS.filter(c => c.stage <= stage).map(c => ({ t: 'g', type: 'chart', params: [c.id], skill: 'charts' })) });
+  sections.push({ name: 'IV. Charts', pts: 1, specs: CHARTS.filter(c => stageOn(c.stage) && c.stage <= stage).map(c => ({ t: 'g', type: 'chart', params: [c.id], skill: 'charts' })) });
   const tr = []; for (let i = 0; i < 5; i++) tr.push(gSpec(makeSkillCard(stage >= 2 ? 'trans' : 'phrase', pick, stage)));
   sections.push({ name: 'V. Translating', pts: 1, specs: tr });
   if (covers === 'grammar') sections.shift(); // grammar quiz: no vocab section

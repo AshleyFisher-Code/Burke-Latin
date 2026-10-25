@@ -85,7 +85,14 @@ export function gradeMiddle(v, w) {
   const raw = letters(v); if (!raw) return { ok: false };
   const lw = letters(w.lemma);
   const cands = [raw]; if (raw.length > lw.length && raw.startsWith(lw)) cands.push(raw.slice(lw.length));
+  if (w.mid) { if (cands.some(n => w.mid.includes(n))) return OK; return { ok: false, hint: `${w.lemma} is plural only. Its middle stuff is ${w.midShow}.` }; }
   if (w.kind === 'a') {
+    if (w.restOk) {
+      const full = letters(w.rest);
+      if (cands.some(n => n === full || w.restOk.includes(n))) return OK;
+      if (cands.some(n => n.length >= 5 && lev(phon(n), phon(full)) <= 2)) return { ok: true, note: `Spelled: ${w.rest}` };
+      return { ok: false, hint: `The entry is ${w.entry}. Type the middle stuff: ${w.rest}.` };
+    }
     if (w.rest) {
       // alter, altera, alterum: accept the full forms, the short pattern (-a -um, since alter + a = altera), or -era -erum.
       const full = letters(w.rest), ok = [full, 'aum', 'eraerum', 'usaum'];
@@ -113,11 +120,16 @@ const stripPron = n => n.replace(/^(he\/she\/it|he\/she|he or she|s\/he|he|she|i
 export function gradeMeaning(v, w) {
   let n = normEn(v); if (!n) return { ok: false };
   if (w.kind === 'v') n = stripPron(n);
-  const accs = w.mean.map(normEn).concat([normEn(w.show)]);
+  const toless = x => x.replace(/^to /, '').replace(/^be /, '');
+  if (w.kind === 'vb') n = toless(stripPron(n.replace(/^i /, '')));
+  if (w.kind === 'p') n = n.replace(/\s*\+?\s*(ablative|accusative|abl|acc)$/, '').trim();
+  let accs = w.mean.map(normEn).concat([normEn(w.show)]);
+  if (w.kind === 'vb') { accs = accs.map(toless); (w.en || []).forEach(e => accs.push(normEn(e.sg))); }
+  if (w.kind === 'p') accs = accs.map(a => a.replace(/\s*\+?\s*(ablative|accusative)$/, '').trim());
   const match = p => accs.includes(p) || accs.some(a => sortW(a) === sortW(p));
-  const full = w.show.includes('/') ? { ok: true, note: `Full meaning: ${w.show}` } : OK;
+  const full = w.show.includes('/') || w.show.includes(',') ? { ok: true, note: `Full meaning: ${w.show}` } : OK;
   if (match(n)) return full;
-  if (n !== 'or') { const parts = n.split(/\s*(?:\/|,|\bor\b|\band\b)\s*/).map(s => s.trim()).filter(Boolean); if (parts.length > 1 && parts.every(match)) return full; }
+  if (n !== 'or') { const parts = n.split(/\s*(?:\/|,|\bor\b|\band\b)\s*/).map(s => s.trim()).filter(Boolean); if (parts.length > 1 && new Set(parts).size === parts.length && parts.every(match)) return full; }
   if (w.kind === 'v' && w.wrongNum.map(normEn).includes(n))
     return { ok: false, hint: w.num === 'sg' ? `${w.lemma} ends in -t, so it's singular. Use the singular English: ${w.show} (he/she ${w.show}).` : `${w.lemma} ends in -nt, so it's plural: ${w.show}.` };
   // woman/women and man/men sound alike: count it, just show the singular.
@@ -130,7 +142,7 @@ export function gradeMeaning(v, w) {
   const own = (w.enPl || []).map(normEn).concat((w.wrongNum || []).map(normEn));
   const hit = fuzzyEn(n, accs, own);
   if (hit) return { ok: true, note: `Spelled: ${hit}` };
-  if (n !== 'or') { const parts = n.split(/\s*(?:\/|,|\bor\b|\band\b)\s*/).map(s => s.trim()).filter(Boolean); if (parts.length > 1 && parts.every(p => match(p) || fuzzyEn(p, accs, own))) return full; }
+  if (n !== 'or') { const parts = n.split(/\s*(?:\/|,|\bor\b|\band\b)\s*/).map(s => s.trim()).filter(Boolean); if (parts.length > 1 && new Set(parts).size === parts.length && parts.every(p => match(p) || fuzzyEn(p, accs, own))) return full; }
   return { ok: false };
 }
 export function gradeOtherForm(v, w) {

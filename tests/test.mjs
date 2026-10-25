@@ -1,3 +1,5 @@
+import { setUnits, isOn, inUnit } from '../js/data.js';
+import { quizWords } from '../js/srs.js';
 // Exhaustive answer-key check. Run: node tests/test.mjs
 import { WORDS, W, fold, letters } from '../js/data.js';
 import { normEn } from '../js/grade.js';
@@ -12,6 +14,11 @@ const assert = (c, msg) => { n++; if (!c) fails.push('ASSERT ' + msg); };
 
 /* ---------- vocab ---------- */
 const mids = w => {
+  if (w.kind === 'vb') return [w.inf];
+  if (w.kind === 'p') return [w.takes];
+  if (w.decl === 3) return [`${w.genForm} ${w.g}`];
+  if (w.mid) return [w.midShow, 'orum m/f', '-ōrum, m/f'];
+  if (w.restOk) return [w.rest, w.rest.replace(/,/g, '')];
   if (w.kind === 'v') return w.num === 'sg' ? ['singular', 'Singular'] : ['plural', 'Plural'];
   if (w.kind === 'a') return w.rest ? [w.rest, 'altera alterum', `${w.lemma}, ${w.rest}`] : ['-a -um', '-a, -um', 'a um', 'a-um', `${w.lemma} -a -um`];
   return w.gen === 'ae' ? [`-ae ${w.g}`, `-ae, ${w.g}`, `ae ${w.g}`, `${w.lemma} -ae ${w.g}`, `ae-${w.g}`] : [`-ī ${w.g}`, `-i ${w.g}`, `-i, ${w.g}`, `${w.lemma} -ī ${w.g}`, `I - ${w.g}`];
@@ -20,8 +27,11 @@ for (const w of WORDS) {
   const means = w.mean.concat([w.show, w.show.toUpperCase(), 'the ' + w.mean[0]]);
   if (w.kind === 'v') means.push('he ' + w.mean[0], 'she ' + w.mean[0]);
   const c1 = g.vocabL2E(w);
-  for (const m of means) { if (w.kind === 'x') ok(c1, [m], true); else for (const mid of mids(w)) ok(c1, [m, mid], true); }
-  ok(c1, w.kind === 'x' ? [w.correct || ''] : ['zzz', mids(w)[0]], false, 'neg ' + w.lemma);
+  if (w.kind === 'vb') means.push('to ' + w.mean[0].replace(/^to /, '').toUpperCase(), w.mean[0].replace(/^to /, ''));
+  for (const m of means) { if (c1.fields.length === 1) ok(c1, [m], true); else for (const mid of mids(w)) ok(c1, [m, mid], true); }
+  ok(c1, c1.fields.length === 1 ? [w.correct || ''] : ['zzz', mids(w)[0]], false, 'neg ' + w.lemma);
+  // every wrong tap choice in the second box is marked wrong
+  if (c1.fields[1] && c1.fields[1].choices) for (const ch of c1.fields[1].choices) if (ch !== mids(w)[0]) ok(c1, [w.mean[0], ch], false, 'wrong tap ' + w.lemma + ' ' + ch);
 }
 // (English→Latin cards were retired Oct 2026: Burke only reads Latin and answers in English.)
 const neg = [[g.vocabL2E(W.agricola), ['farmer', '-ae f']], [g.vocabL2E(W.malus), ['mad', '-a -um']], [g.vocabL2E(W.legit), ['reads', 'plural']], [g.vocabL2E(W.femina), ['girl', '-ae f']], [g.vocabL2E(W.cibus), ['food', '-a -um']], [g.vocabL2E(W.latus), ['happy', '-a -um']]];
@@ -38,7 +48,7 @@ for (const w of g.PL_NOUNS) for (const num of ['sg', 'pl']) {
   ok(c, [num === 'sg' ? 'plural' : 'singular', Gg[0], Dd[0]], false);
 }
 /* ---------- charts ---------- */
-for (const ch of g.CHARTS) { const c = g.gChart(ch.id); ok(c, [ch.sg, ch.pl], true); ok(c, ['-' + ch.sg, '-' + fold(ch.pl)], true); ok(c, [ch.pl, ch.sg], false); }
+for (const ch of g.CHARTS.filter(x => !x.cells)) { const c = g.gChart(ch.id); ok(c, [ch.sg, ch.pl], true); ok(c, ['-' + ch.sg, '-' + fold(ch.pl)], true); ok(c, [ch.pl, ch.sg], false); }
 /* ---------- agreement ---------- */
 for (const nw of g.PL_NOUNS) for (const num of ['sg', 'pl']) for (const a of g.ADJS) {
   const c = g.gAgree(nw.id, num, a.id); const want = a.forms[nw.g][num];
@@ -140,7 +150,7 @@ assert(streakView(s2, d).count === 7 && streakView(s2, d).atRisk, 'rest day prot
 completeDay(s2, d++); assert(s2.streak.count === 8 && s2.streak.rest === 0, 'used rest ' + JSON.stringify(s2.streak));
 d += 2; assert(streakView(s2, d).count === 0, 'broken after 2 missed with no rest');
 completeDay(s2, d); assert(s2.streak.count === 1, 'restart');
-const s3 = blankState(); for (let i = 0; i < 5; i++) completeDay(s3, 200 + i); assert(s3.streak.ranks.length === 1 && s3.streak.ranks[0].days === 5, 'rank at 5');
+const stk3 = blankState(); for (let i = 0; i < 5; i++) completeDay(stk3, 200 + i); assert(stk3.streak.ranks.length === 1 && stk3.streak.ranks[0].days === 5, 'rank at 5');
 /* ---------- readiness ---------- */
 const s4 = blankState(); const qd = dayFromISO('2026-10-13'); const quiz = { stage: 2, day: qd, daysLeft: 3 };
 assert(readiness(s4, quiz, qd - 3).color === 'red', 'red when nothing done');
@@ -192,6 +202,8 @@ for (const [id, a] of spellBad) ok(L2(id), [a, ...sec(W[id])], false, 'spelling-
 // No word's meaning is ever accepted for a different word (unless they really share it).
 for (const w of WORDS) for (const o of WORDS) if (o !== w) for (const m of o.mean) {
   if (w.mean.some(x => normEn(x) === normEn(m))) continue;
+  // Same English word, really the same meaning (a noun and its verb, or the Stage 2 form and the Stage 3 dictionary verb)
+  if ([['habito', 'habitat'], ['sedeo', 'sedet'], ['ludo', 'fabula'], ['pono', 'area'], ['coquo', 'coquus']].some(([a, b]) => w.id === a && o.id === b)) continue;
   const r = g.vocabL2E(w).check([m, ...sec(w)]); n++; if (r.ok[0]) fails.push(`ACCEPTED ${o.lemma}'s meaning "${m}" for ${w.lemma}`);
 }
 // Misspelled sentences still pass; the wrong number still fails.
@@ -313,6 +325,90 @@ assert(saw2 > 50, 'sessions include two-part sentences');
 for (let i = 0; i < 40; i++) { const c = g.makeSkillCard('trans', g.pickOne, 1); assert(c.type !== 'trans2', 'no two-part at stage 1'); }
 // Extra worksheet words are help only: never vocab cards, never in the vocab test
 assert(!WORDS.some(w => ['ambulat', 'quis', 'in'].includes(w.id)), 'help words stay out of the vocab list');
+/* ---------- Stage 3: accusative ---------- */
+setUnits([1, 2, 3]);
+let nf3 = 0;
+// independent accusative endings, straight from the chart in the packet
+const accOf = (w, num) => w.gen === 'ae' ? w.lemma.slice(0, -1) + (num === 'sg' ? 'am' : 'as') : w.pl.slice(0, -1) + (num === 'sg' ? 'um' : 'os');
+const nomOf = (w, num) => (num === 'sg' ? w.lemma : w.pl);
+for (const w of g.NOUNS.filter(x => x.pl)) for (const num of ['sg', 'pl']) for (const cas of ['nom', 'acc']) {
+  assert(w.acc[num] === accOf(w, num), 'acc form ' + w.lemma + ' ' + num + ' ' + w.acc[num]);
+  const c = g.gCase(w.id, num, cas); nf3++;
+  const right = [cas === 'acc' ? 'accusative' : 'nominative', num === 'sg' ? 'singular' : 'plural'];
+  ok(c, right, true, 'case ' + c.prompt.latin);
+  for (const a of ['nominative', 'accusative']) for (const b of ['singular', 'plural']) if (a !== right[0] || b !== right[1]) ok(c, [a, b], false, 'case wrong ' + c.prompt.latin + ' ' + a + ' ' + b);
+  const d = g.gDecline(w.id, num, cas), want = cas === 'acc' ? accOf(w, num) : nomOf(w, num);
+  assert(d.fields[0].choices.includes(want) && new Set(d.fields[0].choices).size === d.fields[0].choices.length, 'decline choices ' + w.lemma);
+  for (const ch of d.fields[0].choices) ok(d, [ch], ch === want, 'decline ' + w.lemma + ' ' + cas + ' ' + num + ' ' + ch);
+}
+for (const cid of ['c1', 'c2']) { const c = g.gChart(cid), want = c.fields.map((f, i) => ({ c1: ['-a', '-ae', '-am', '-as'], c2: ['-us / -r', '-ī', '-um', '-os'] }[cid][i]));
+  ok(c, want, true, 'chart ' + cid); for (let i = 0; i < 4; i++) for (const ch of c.fields[i].choices) if (ch !== want[i]) { const v = want.slice(); v[i] = ch; ok(c, v, false, 'chart wrong ' + cid + ' ' + i + ' ' + ch); } }
+const V3 = { amo: ['amat', 'amant'], ambulo: ['ambulat', 'ambulant'], audio: ['audit', 'audiunt'], curro: ['currit', 'currunt'], habeo: ['habet', 'habent'], habito: ['habitat', 'habitant'],
+  sedeo: ['sedet', 'sedent'], terreo: ['terret', 'terrent'], timeo: ['timet', 'timent'], vexo: ['vexat', 'vexant'], video: ['videt', 'vident'] };
+for (const [id, [sg, pl]] of Object.entries(V3)) { assert(g.v3(W[id], 'sg') === sg && g.v3(W[id], 'pl') === pl, 'verb form ' + id); }
+assert(g.DRILL_VERBS.every(v => v.stage === 3), 'only Stage 3 verbs are drilled so far');
+// generated sentences: check the Latin independently, then the English key
+const P3 = g.pools3(), seen3 = new Set();
+let n3 = 0, cf3 = 0, of3 = 0;
+for (let i = 0; i < 9000; i++) {
+  const sp = g.randomSpec3(g.pickOne, P3, 0.45), key = JSON.stringify(sp); if (seen3.has(key)) continue; seen3.add(key); n3++;
+  const st = g.sentence3(sp), c = g.gDobj(sp);
+  assert(!/undefined|null/.test(st.latin + st.correct), 'undefined: ' + st.latin + ' / ' + st.correct);
+  st.parts.forEach(p => { if (!p.cl.kind3) return; const tc = p.cl;
+    // subject is nominative and the verb agrees with it
+    if (tc.s.length === 1) assert(p.sLat[0] === nomOf(W[tc.s[0]], tc.num), 'subject nominative ' + st.latin);
+    assert(p.vf === V3[tc.v][p.sNum === 'sg' ? 0 : 1], 'verb agrees ' + st.latin);
+    if (tc.sa) assert(p.sLat[1] === W[tc.sa].forms[W[tc.s[0]].g][tc.num], 'subject adjective ' + st.latin);
+    if (tc.k === 'tr') { const o = W[tc.o]; assert(p.oLat[0] === accOf(o, tc.onum), 'object accusative ' + st.latin);
+      if (tc.oa) { const a = W[tc.oa], stem = a.lemma === 'alter' ? 'alter' : a.forms.f.sg.slice(0, -1); assert(p.oLat[1] === stem + (o.g === 'f' ? (tc.onum === 'sg' ? 'am' : 'as') : (tc.onum === 'sg' ? 'um' : 'os')), 'object adjective ' + st.latin); }
+      assert(W[tc.v].tr !== false, 'intransitive verb with an object ' + st.latin); }
+    else assert(W[tc.v].tr === false, 'transitive verb without object ' + st.latin);
+    if (tc.neg) assert(p.lat[p.lat.indexOf(p.vf) - 1] === 'non', 'non before verb ' + st.latin);
+  });
+  ok(c, [st.correct], true, 'dobj key ' + st.latin);
+  ok(c, [st.correct.toLowerCase().replace(/[.,]/g, '')], true, 'dobj lower ' + st.latin);
+  const j = st.join ? ' ' + st.join + ' ' : '';
+  for (const a of st.parts[0].acc.slice(0, 5)) for (const b of (st.parts[1] ? st.parts[1].acc.slice(0, 3) : [''])) ok(c, [(a + j + b).trim()], true, 'dobj acc ' + st.latin);
+  st.cons.forEach((con, ci) => { const other = st.parts[1 - ci] ? st.parts[1 - ci].acc[0] : null;
+    for (const bad of [...con.swap.slice(0, 3), ...con.subjNum.slice(0, 2), ...con.objNum.slice(0, 2)]) if (!st.parts[ci].acc.includes(bad))
+      ok(c, [!st.join ? bad : ci === 0 ? bad + j + other : st.parts[0].acc[0] + j + bad], false, 'dobj wrong reading ' + st.latin + ' :: ' + bad); });
+  if (st.join) { ok(c, [st.parts[0].acc[0]], false, 'dobj half ' + st.latin); ok(c, [st.parts[0].acc[0] + (st.join === 'and' ? ' but ' : ' and ') + st.parts[1].acc[0]], false, 'dobj wrong conj ' + st.latin); }
+  if (st.parts.some(p => p.cl.kind3 && p.cl.neg)) ok(c, [st.correct.replace(/ not\b/g, '').replace(/\bdoes (\w+)/, '$1s').replace(/\bdo (\w+)/, '$1')], false, 'dobj dropped not ' + st.latin);
+  const mis = st.correct.replace(/\b(girl|teacher|student|farmer|friend|sailor|wolf|wolves|horse|horses|garden|forest|stream|school|scares|annoys|hears|loves)\b/i, m => m.length > 4 ? m.slice(0, 2) + m[3] + m[2] + m.slice(4) : m + m.slice(-1));
+  if (mis !== st.correct) ok(c, [mis], true, 'dobj misspelled ' + st.latin + ' <- ' + mis);
+  assert(cardFromSpec({ t: 'g', type: 'dobj', params: [sp], skill: 'dobj' }).correct === c.correct, 'rebuild dobj');
+  // case & function: every question, every wrong answer
+  for (const ask of g.caseFnAsks(sp)) { const f = g.gCaseFn(sp, ask); cf3++;
+    if (ask.modify) { const want = st.parts[ask.p].lat[ask.n]; assert(f.fields[0].choices.includes(want), 'modify choices'); for (const ch of f.fields[0].choices) ok(f, [ch], ch === want, 'modify ' + f.summary + ' ' + ch); continue; }
+    const right = [ask.role === 'obj' ? 'accusative' : 'nominative', { subj: 'subject', obj: 'direct object', comp: 'complement' }[ask.role]];
+    const wd = st.parts[ask.p].lat[ask.w]; // independent: accusative endings mean direct object
+    if (ask.role === 'obj') assert(/(am|as|um|os)$/.test(wd), 'object word is accusative ' + wd); else assert(!/(am|as|um|os)$/.test(wd) || W[letters(wd)], 'nominative word ' + wd);
+    for (const a of ['nominative', 'accusative']) for (const b of ['subject', 'direct object', 'complement']) ok(f, [a, b], a === right[0] && b === right[1], 'casefn ' + st.latin + ' ' + wd + ' ' + a + ' ' + b);
+  }
+  // pick the object form
+  sp.c2 ? null : (() => { const tc = sp.c1; if (tc.k !== 'tr') return; for (const mode of ['noun', ...(tc.oa ? ['adj'] : [])]) { const f = g.gObjForm(tc, mode); of3++;
+    const p = g.tclause(tc), want = mode === 'noun' ? p.oLat[0] : p.oLat[1];
+    assert(f.fields[0].choices.includes(want) && new Set(f.fields[0].choices).size === f.fields[0].choices.length, 'objform choices ' + f.summary);
+    for (const ch of f.fields[0].choices) ok(f, [ch], ch === want, 'objform ' + f.summary + ' ' + ch); } })();
+}
+// mock quizzes and sessions at Stage 3
+for (let i = 0; i < 25; i++) {
+  const m = buildMock(st, {}, 3), pts = m.specs.reduce((a, x) => a + x.pts, 0); assert(pts === 30, 'stage 3 mock points = ' + pts);
+  const mg = buildMock(st, {}, 3, 'grammar'), pg = mg.specs.reduce((a, x) => a + x.pts, 0); assert(pg === 20, 'stage 3 grammar mock points = ' + pg);
+  const mv = buildMock(st, {}, 3, 'vocab'); assert(mv.specs.every(sp => inUnit(W[sp.id], 3)), 'vocab mock: Unit 3 words only');
+  for (const b of [m, mg, buildSkill(st, {}, 'case'), buildSkill(st, {}, 'objform'), buildSkill(st, {}, 'casefn'), buildSkill(st, {}, 'dobj'), buildSkill(st, {}, 'charts'), buildDaily(st, {}, today, null)])
+    for (const sp of b.specs) { const c = cardFromSpec(sp); if (c.answers || c.type === 'l2e' || c.type === 'pick') continue; if (c.fields.every(f => f.choices)) { const r = c.check(c.fields.map(() => '')); assert(!r.ok.every(Boolean), 'blank answer accepted ' + c.summary); } }
+}
+// Unit 3 vocab test = Unit 3 words (subito and quī/quae are on her Stage 3 list too)
+const q3 = quizWords(3).map(w => w.id); assert(q3.includes('subito') && q3.includes('quiquae') && q3.includes('lupus') && !q3.includes('puella') && q3.length === 30, 'unit 3 words ' + q3.length);
+// Units not ticked never show up
+setUnits([1, 2]);
+for (let i = 0; i < 40; i++) for (const b of [buildDaily(st, { units: [1, 2] }, today, null), buildSkill(st, { units: [1, 2] }, 'trans'), buildSkill(st, { units: [1, 2] }, 'fixsent'), buildMock(st, { units: [1, 2] }, 2), buildTestRun(st, { units: [1, 2] }, 2)])
+  for (const sp of b.specs) { const c = cardFromSpec(sp); for (const id of c.words || []) assert(W[id].stage <= 2, `unticked word ${id} (stage ${W[id].stage}) in ${b.mode}`); assert(!c.skill || g.SKILL[c.skill].stage <= 2, 'unticked skill ' + c.skill); }
+setUnits([1, 2, 3]);
+for (let i = 0; i < 20; i++) for (const sp of buildDaily(st, { units: [1, 3] }, today, null).specs) { const c = cardFromSpec(sp); if (c.type === 'l2e' || c.type === 'pick') assert(isOn(W[c.words[0]]), 'skipped unit word'); }
+setUnits([1, 2, 3]);
+console.log(`stage 3: noun forms ${nf3}, sentences ${n3}, case/function ${cf3}, object forms ${of3}`);
 console.log(`two-part sentences ${two}, fix-the-error ${fix2n}`);
 console.log(`checks: ${n}  failures: ${fails.length}  (phrases ${phraseCount}, sentences ${sentCount})`);
 if (fails.length) { console.log(fails.slice(0, 80).join('\n')); process.exit(1); }
