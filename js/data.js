@@ -19,7 +19,9 @@ const N = (stage, lemma, gen, g, show, mean, hook, x = {}) => {
   const accStem = gen === 'ae' ? lemma.slice(0, -1) : (pl ? pl.slice(0, -1) : (lemma.endsWith('us') ? lemma.slice(0, -2) : lemma));
   const acc = gen === 'ae' ? { sg: accStem + 'am', pl: accStem + 'as' } : { sg: accStem + 'um', pl: accStem + 'os' };
   const abl = gen === 'ae' ? { sg: accStem + 'ā', pl: accStem + 'īs' } : { sg: accStem + 'ō', pl: accStem + 'īs' };
-  WORDS.push({ id: letters(lemma), stage, lemma, kind: 'n', gen, g, show, mean, hook: hook || null, pl, acc, abl,
+  const gen8 = gen === 'ae' ? { sg: accStem + 'ae', pl: accStem + 'ārum' } : { sg: accStem + 'ī', pl: accStem + 'ōrum' };
+  const dat9 = gen === 'ae' ? { sg: accStem + 'ae', pl: accStem + 'īs' } : { sg: accStem + 'ō', pl: accStem + 'īs' };
+  WORDS.push({ id: letters(lemma), stage, lemma, kind: 'n', gen, g, show, mean, hook: hook || null, pl, acc, abl, gen8, dat9,
     enPl: x.noPlural ? [] : (x.enPl || mean.map(enPlural)), person: !!x.person, animal: !!x.animal, abstract: !!x.abstract, trap: !!x.trap,
     entry: x.entry || `${lemma} -${gen === 'i' ? 'ī' : 'ae'} ${g}` });
 };
@@ -28,8 +30,10 @@ const A = (stage, lemma, show, mean, hook, x = {}) => {
   const forms = { m: { sg: lemma, pl: stem + 'ī' }, f: { sg: stem + 'a', pl: stem + 'ae' } };
   const acc = { m: { sg: stem + 'um', pl: stem + 'os' }, f: { sg: stem + 'am', pl: stem + 'as' } };
   const abl = { m: { sg: stem + 'ō', pl: stem + 'īs' }, f: { sg: stem + 'ā', pl: stem + 'īs' } };
+  const gen8 = { m: { sg: stem + 'ī', pl: stem + 'ōrum' }, f: { sg: stem + 'ae', pl: stem + 'ārum' } };
+  const dat9 = { m: { sg: stem + 'ō', pl: stem + 'īs' }, f: { sg: stem + 'ae', pl: stem + 'īs' } };
   WORDS.push({ id: letters(lemma), stage, lemma, kind: 'a', show, mean, hook: hook || null, rest: x.rest || null, near: x.near || null, restOk: x.restOk || null,
-    forms, acc, abl, phrase: x.phrase !== false, grammar: x.grammar !== false, entry: x.entry || (x.rest ? `${lemma}, ${x.rest}` : `${lemma} -a -um`) });
+    forms, acc, abl, gen8, dat9, phrase: x.phrase !== false, grammar: x.grammar !== false, entry: x.entry || (x.rest ? `${lemma}, ${x.rest}` : `${lemma} -a -um`) });
 };
 const V = (stage, lemma, pair, num, show, mean, base, prog, wrongNum, hook) => {
   WORDS.push({ id: letters(lemma), stage, lemma, kind: 'v', pair, num, show, mean, base, prog, wrongNum, hook: hook || null,
@@ -103,7 +107,7 @@ A(2, 'alter', 'another', ['another', 'the other', 'other'], 'alternate = another
 A(2, 'iratus', 'angry', ['angry', 'mad', 'furious'], 'irate = angry');
 A(2, 'molestus', 'annoying', ['annoying', 'troublesome', 'bothersome'], 'a molestus person is a pest');
 A(2, 'multus', 'much / many', ['much', 'many', 'a lot of', 'a lot', 'lots of'], 'multi = many');
-A(2, 'solus', 'alone / lonely', ['alone', 'lonely'], 'a solo is done alone');
+A(2, 'solus', 'alone / lonely', ['lonely', 'alone'], 'a solo is done alone');
 A(2, 'vicinus', 'neighboring', ['neighboring', 'neighbouring', 'nearby'], 'vicinity = the area nearby',
   { near: { neighbor: 'Close, but vicinus is an adjective: neighboring.', neighbour: 'Close, but vicinus is an adjective: neighboring.' } });
 V(2, 'est', 'sunt', 'sg', 'is', ['is'], 'are', null, ['are'], 'est = is (Spanish es, French est)');
@@ -143,6 +147,8 @@ const PAST = { love: 'loved', like: 'liked', walk: 'walked', hear: 'heard', 'lis
   laugh: 'laughed', smile: 'smiled', call: 'called', summon: 'summoned', praise: 'praised', work: 'worked', remain: 'remained', stay: 'stayed', speak: 'spoke', say: 'said',
   talk: 'talked', know: 'knew', stand: 'stood', think: 'thought', 'eat dinner': 'ate dinner', dine: 'dined', 'have dinner': 'had dinner', sleep: 'slept', sail: 'sailed',
   play: 'played', tell: 'told', narrate: 'narrated', carry: 'carried', bring: 'brought', fight: 'fought', write: 'wrote',
+  'call together': 'called together', gather: 'gathered', lead: 'led', guide: 'guided', wander: 'wandered', roam: 'roamed', cry: 'cried', weep: 'wept',
+  read: 'read', put: 'put', place: 'placed', try: 'tried', test: 'tested',
   prepare: 'prepared', 'get ready': 'got ready', hold: 'held', keep: 'kept', save: 'saved', protect: 'protected', come: 'came', arrive: 'arrived' };
 const E = (sg, pl, ing) => ({ sg, pl, ing, past: PAST[pl] || null });
 VD(3, 'amo', 'amāre', 'amo, amāre', 'to love', ['to love', 'to like'], { tr: 'any', en: [E('loves', 'love', 'loving'), E('likes', 'like', 'liking')] });
@@ -289,13 +295,13 @@ N(8, 'victoria', 'ae', 'f', 'victory', ['victory', 'win'], null, { abstract: tru
 A(8, 'ridiculus', 'silly, laughable', ['silly', 'laughable', 'ridiculous', 'funny'], null);
 A(8, 'miser', 'miserable, sad', ['miserable', 'sad', 'unhappy', 'wretched'], null, { stem: 'miser', entry: 'miser -a -um' });
 A(8, 'cunctī', 'all', ['all', 'everyone', 'all of them', 'every'], null, { rest: '-ae -a', restOk: ['aea', 'cunctaecuncta', 'aeai'], grammar: false, phrase: false, entry: 'cunctī -ae -a' });
-VD(8, 'convoco', 'convocāre', 'convoco, -āre, -avī, -atus', 'to call together', ['to call together', 'to summon', 'to assemble', 'to gather'], 'convocation');
-VD(8, 'duco', 'ducere', 'duco, ducere, duxi, ductus', 'to lead', ['to lead', 'to take', 'to guide'], 'duct, conductor');
-VD(8, 'erro', 'errāre', 'erro, -āre, -avī, -atus', 'to wander', ['to wander', 'to stray', 'to roam', 'to make a mistake'], 'errant');
-VD(8, 'lacrimo', 'lacrimāre', 'lacrimo, -āre, -avī, -atus', 'to cry', ['to cry', 'to weep'], 'lacrimal = tear gland');
-VD(8, 'lego', 'legere', 'lego, legere, legī, lectus', 'to read', ['to read', 'to choose'], 'legible');
-VD(8, 'pono', 'ponere', 'pono, ponere, posuī, positus', 'to put, place', ['to put', 'to place', 'to set'], 'position');
-VD(8, 'tempto', 'temptāre', 'tempto, -āre, -avī, -atus', 'to try', ['to try', 'to attempt', 'to test', 'to tempt'], 'attempt');
+VD(8, 'convoco', 'convocāre', 'convoco, -āre, -avī, -atus', 'to call together', ['to call together', 'to summon', 'to assemble', 'to gather'], { hook: 'convocation', tr: 'anim', en: [E('calls together', 'call together', 'calling together'), E('summons', 'summon', 'summoning'), E('gathers', 'gather', 'gathering')] });
+VD(8, 'duco', 'ducere', 'duco, ducere, duxi, ductus', 'to lead', ['to lead', 'to take', 'to guide'], { hook: 'duct, conductor', tr: 'anim', en: [E('leads', 'lead', 'leading'), E('guides', 'guide', 'guiding')] });
+VD(8, 'erro', 'errāre', 'erro, -āre, -avī, -atus', 'to wander', ['to wander', 'to stray', 'to roam', 'to make a mistake'], { hook: 'errant', tr: false, en: [E('wanders', 'wander', 'wandering'), E('roams', 'roam', 'roaming')] });
+VD(8, 'lacrimo', 'lacrimāre', 'lacrimo, -āre, -avī, -atus', 'to cry', ['to cry', 'to weep'], { hook: 'lacrimal = tear gland', tr: false, en: [E('cries', 'cry', 'crying'), E('weeps', 'weep', 'weeping')] });
+VD(8, 'lego', 'legere', 'lego, legere, legī, lectus', 'to read', ['to read', 'to choose'], { hook: 'legible', tr: 'thing', en: [E('reads', 'read', 'reading')], objs: ['fabula', 'epistula'] });
+VD(8, 'pono', 'ponere', 'pono, ponere, posuī, positus', 'to put, place', ['to put', 'to place', 'to set'], { hook: 'position', tr: 'thing', en: [E('puts', 'put', 'putting'), E('places', 'place', 'placing')], objs: ['cibus', 'cena', 'pecunia', 'ramus', 'tunica', 'epistula', 'aqua'] });
+VD(8, 'tempto', 'temptāre', 'tempto, -āre, -avī, -atus', 'to try', ['to try', 'to attempt', 'to test', 'to tempt'], { hook: 'attempt', tr: 'thing', en: [E('tries', 'try', 'trying'), E('tests', 'test', 'testing')], objs: ['cibus', 'cena', 'aqua'] });
 X(8, 'atque', 'and, and so', ['and', 'and so', 'and also'], null);
 X(8, 'fortasse', 'by chance', ['by chance', 'perhaps', 'maybe', 'possibly'], null);
 X(8, 'identidem', 'again and again', ['again and again', 'repeatedly', 'over and over'], null);
