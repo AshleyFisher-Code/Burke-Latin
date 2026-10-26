@@ -33,7 +33,7 @@ const A = (stage, lemma, show, mean, hook, x = {}) => {
   const gen8 = { m: { sg: stem + 'ī', pl: stem + 'ōrum' }, f: { sg: stem + 'ae', pl: stem + 'ārum' } };
   const dat9 = { m: { sg: stem + 'ō', pl: stem + 'īs' }, f: { sg: stem + 'ae', pl: stem + 'īs' } };
   WORDS.push({ id: letters(lemma), stage, lemma, kind: 'a', show, mean, hook: hook || null, rest: x.rest || null, near: x.near || null, restOk: x.restOk || null,
-    forms, acc, abl, gen8, dat9, phrase: x.phrase !== false, grammar: x.grammar !== false, entry: x.entry || (x.rest ? `${lemma}, ${x.rest}` : `${lemma} -a -um`) });
+    forms, acc, abl, gen8, dat9, poss: x.poss || null, phrase: x.phrase !== false, grammar: x.grammar !== false, entry: x.entry || (x.rest ? `${lemma}, ${x.rest}` : `${lemma} -a -um`) });
 };
 const V = (stage, lemma, pair, num, show, mean, base, prog, wrongNum, hook) => {
   WORDS.push({ id: letters(lemma), stage, lemma, kind: 'v', pair, num, show, mean, base, prog, wrongNum, hook: hook || null,
@@ -45,8 +45,11 @@ const X = (stage, lemma, show, mean, hook, x = {}) => {
 
 // 3rd declension noun: dictionary entry gives the genitive (frater, fratris m). Middle stuff is tapped.
 const N3 = (stage, lemma, genForm, g, show, mean, x = {}) => {
-  WORDS.push({ id: letters(lemma), stage, lemma, kind: 'n', decl: 3, gen: '3', genForm, g, show, mean, hook: x.hook || null, pl: null, acc: null,
-    enPl: x.enPl || mean.map(enPlural), person: !!x.person, noGrammar: true, entry: `${lemma}, ${genForm} ${g}${x.note ? ' ' + x.note : ''}` });
+  const st = genForm.slice(0, -2), gpl = st + (x.ium ? 'ium' : 'um');
+  WORDS.push({ id: letters(lemma), stage, lemma, kind: 'n', decl: 3, gen: '3', genForm, g, show, mean, hook: x.hook || null, stem3: st,
+    pl: st + 'es', acc: { sg: st + 'em', pl: st + 'es' }, abl: { sg: st + 'e', pl: st + 'ibus' }, gen8: { sg: genForm, pl: gpl }, dat9: { sg: st + 'i', pl: st + 'ibus' },
+    enPl: x.enPl || mean.map(enPlural), person: !!x.person, abstract: !!x.abstract, noAdj: !!x.noAdj, noGrammar: true, g3: !x.skip3,
+    entry: `${lemma}, ${genForm} ${g}${x.note ? ' ' + x.note : ''}` });
 };
 // Dictionary-form verb (from Stage 3): amo, amāre. Conjugation comes from the infinitive.
 // en: English for sentences: [{sg, pl, ing}] (only for verbs the grammar drills use so far).
@@ -55,7 +58,7 @@ const conjOf = inf => { const t = inf.normalize('NFD').replace(/[\u0300-\u036f]/
 const VD = (stage, lemma, inf, entry, show, mean, x = {}) => {
   if (x == null || typeof x === 'string') x = { hook: x || null };
   WORDS.push({ id: letters(lemma), stage, lemma, kind: 'vb', inf, conj: conjOf(inf), show, mean, hook: x.hook || null, entry,
-    tr: x.tr ?? null, en: x.en || null, noNeg: !!x.noNeg, objs: x.objs || null, infChoices: x.infChoices || null });
+    tr: x.tr ?? null, en: x.en || null, noNeg: !!x.noNeg, objs: x.objs || null, dat: !!x.dat, infChoices: x.infChoices || null });
 };
 // Preposition: meaning + which case it takes (tapped).
 const P = (stage, lemma, takes, show, mean, x = {}) => {
@@ -149,6 +152,10 @@ const PAST = { love: 'loved', like: 'liked', walk: 'walked', hear: 'heard', 'lis
   play: 'played', tell: 'told', narrate: 'narrated', carry: 'carried', bring: 'brought', fight: 'fought', write: 'wrote',
   'call together': 'called together', gather: 'gathered', lead: 'led', guide: 'guided', wander: 'wandered', roam: 'roamed', cry: 'cried', weep: 'wept',
   read: 'read', put: 'put', place: 'placed', try: 'tried', test: 'tested',
+  give: 'gave', order: 'ordered', command: 'commanded', entrust: 'entrusted', 'hand over': 'handed over', show: 'showed', announce: 'announced', report: 'reported',
+  rest: 'rested', 'stay awake': 'stayed awake', 'keep watch': 'kept watch',
+  open: 'opened', cook: 'cooked', rejoice: 'rejoiced', 'be glad': 'were glad', move: 'moved', 'drive off': 'drove off', 'drive away': 'drove away', repel: 'repelled',
+  'push back': 'pushed back', reply: 'replied', answer: 'answered', respond: 'responded', ask: 'asked', deliver: 'delivered',
   prepare: 'prepared', 'get ready': 'got ready', hold: 'held', keep: 'kept', save: 'saved', protect: 'protected', come: 'came', arrive: 'arrived' };
 const E = (sg, pl, ing) => ({ sg, pl, ing, past: PAST[pl] || null });
 VD(3, 'amo', 'amāre', 'amo, amāre', 'to love', ['to love', 'to like'], { tr: 'any', en: [E('loves', 'love', 'loving'), E('likes', 'like', 'liking')] });
@@ -244,7 +251,7 @@ A(6, 'praeclarus', 'famous', ['famous', 'well known', 'distinguished', 'renowned
 VD(6, 'ceno', 'cenāre', 'ceno, -āre, -avī, -atus', 'to eat dinner', ['to eat dinner', 'to dine', 'to have dinner', 'eat dinner'], { tr: false, en: [E('eats dinner', 'eat dinner', 'eating dinner'), E('dines', 'dine', 'dining'), E('has dinner', 'have dinner', 'having dinner')] });
 VD(6, 'dormio', 'dormīre', 'dormio -īre, -ivī, -itus', 'to sleep', ['to sleep'], { hook: 'dormitory = where you sleep', tr: false, en: [E('sleeps', 'sleep', 'sleeping')] });
 VD(6, 'navigo', 'navigāre', 'navigo -āre, -avī, -atus', 'to sail', ['to sail', 'to navigate'], { hook: 'navigate', tr: false, en: [E('sails', 'sail', 'sailing')] });
-VD(6, 'paro', 'parāre', 'paro -āre, -avī, -atus', 'to prepare', ['to prepare', 'to get ready', 'to make ready'], { hook: 'prepare', tr: 'thing', en: [E('prepares', 'prepare', 'preparing'), E('gets ready', 'get ready', 'getting ready')] });
+VD(6, 'paro', 'parāre', 'paro -āre, -avī, -atus', 'to prepare', ['to prepare', 'to get ready', 'to make ready'], { hook: 'prepare', tr: 'thing', en: [E('prepares', 'prepare', 'preparing'), E('gets ready', 'get ready', 'getting ready')], dat: true });
 VD(6, 'teneo', 'tenēre', 'teneo, tenēre, tenuī, tentus', 'to hold', ['to hold', 'to keep', 'to have'], { hook: 'tenacious', tr: 'thing', en: [E('holds', 'hold', 'holding'), E('keeps', 'keep', 'keeping')] });
 VD(6, 'servo', 'servāre', 'servo, -āre, -avī, -atus', 'to save', ['to save', 'to keep', 'to protect', 'to preserve'], { hook: 'preserve', tr: 'anim', en: [E('saves', 'save', 'saving'), E('protects', 'protect', 'protecting')] });
 VD(6, 'venio', 'venīre', 'venio, venīre, venī, ventus', 'to come', ['to come', 'to arrive'], { hook: 'venue = where people come', tr: false, en: [E('comes', 'come', 'coming'), E('arrives', 'arrive', 'arriving')] });
@@ -269,8 +276,8 @@ A(7, 'secundus', 'second', ['second'], null);
 A(7, 'tertius', 'third', ['third'], null);
 X(7, 'accidit', 'it happens', ['it happens', 'happens', 'it happened'], 'accident = something that happens');
 VD(7, 'ludo', 'ludere', 'ludo, ludere, lusī, lusus', 'to play', ['to play'], { hook: 'ludicrous', tr: false, en: [E('plays', 'play', 'playing')] });
-VD(7, 'narro', 'narrāre', 'narro, -āre, -avī, -atus', 'to tell (a story)', ['to tell', 'to tell a story', 'to narrate', 'to tell (a story)'], { hook: 'narrate', tr: 'thing', en: [E('tells', 'tell', 'telling'), E('narrates', 'narrate', 'narrating')], objs: ['fabula', 'iocus'] });
-VD(7, 'porto', 'portāre', 'porto -āre, -avī, -atus', 'to carry', ['to carry', 'to bring'], { hook: 'portable', tr: 'thing', en: [E('carries', 'carry', 'carrying'), E('brings', 'bring', 'bringing')], objs: ['cena', 'cibus', 'pecunia', 'aqua', 'ramus', 'tunica', 'epistula', 'copia'] });
+VD(7, 'narro', 'narrāre', 'narro, -āre, -avī, -atus', 'to tell (a story)', ['to tell', 'to tell a story', 'to narrate', 'to tell (a story)'], { hook: 'narrate', tr: 'thing', en: [E('tells', 'tell', 'telling'), E('narrates', 'narrate', 'narrating')], objs: ['fabula', 'iocus'], dat: true });
+VD(7, 'porto', 'portāre', 'porto -āre, -avī, -atus', 'to carry', ['to carry', 'to bring'], { hook: 'portable', tr: 'thing', en: [E('carries', 'carry', 'carrying'), E('brings', 'bring', 'bringing')], objs: ['cena', 'cibus', 'pecunia', 'aqua', 'ramus', 'tunica', 'epistula', 'copia'], dat: true });
 VD(7, 'possum', 'posse', 'possum, posse, potui, X', 'to be able', ['to be able', 'can', 'to be able to', 'able'], { hook: 'possible', infChoices: ['posse', 'possumāre', 'possumere', 'potēre'] });
 VD(7, 'pugno', 'pugnāre', 'pugno -āre, -avī, -atus', 'to fight', ['to fight'], { hook: 'pugnacious = likes to fight', tr: false, en: [E('fights', 'fight', 'fighting')] });
 X(7, 'necesse est', 'it is necessary', ['it is necessary', 'necessary', 'it is needed', 'it is essential'], null);
@@ -299,7 +306,7 @@ VD(8, 'convoco', 'convocāre', 'convoco, -āre, -avī, -atus', 'to call together
 VD(8, 'duco', 'ducere', 'duco, ducere, duxi, ductus', 'to lead', ['to lead', 'to take', 'to guide'], { hook: 'duct, conductor', tr: 'anim', en: [E('leads', 'lead', 'leading'), E('guides', 'guide', 'guiding')] });
 VD(8, 'erro', 'errāre', 'erro, -āre, -avī, -atus', 'to wander', ['to wander', 'to stray', 'to roam', 'to make a mistake'], { hook: 'errant', tr: false, en: [E('wanders', 'wander', 'wandering'), E('roams', 'roam', 'roaming')] });
 VD(8, 'lacrimo', 'lacrimāre', 'lacrimo, -āre, -avī, -atus', 'to cry', ['to cry', 'to weep'], { hook: 'lacrimal = tear gland', tr: false, en: [E('cries', 'cry', 'crying'), E('weeps', 'weep', 'weeping')] });
-VD(8, 'lego', 'legere', 'lego, legere, legī, lectus', 'to read', ['to read', 'to choose'], { hook: 'legible', tr: 'thing', en: [E('reads', 'read', 'reading')], objs: ['fabula', 'epistula'] });
+VD(8, 'lego', 'legere', 'lego, legere, legī, lectus', 'to read', ['to read', 'to choose'], { hook: 'legible', tr: 'thing', en: [E('reads', 'read', 'reading')], objs: ['fabula', 'epistula'], dat: true });
 VD(8, 'pono', 'ponere', 'pono, ponere, posuī, positus', 'to put, place', ['to put', 'to place', 'to set'], { hook: 'position', tr: 'thing', en: [E('puts', 'put', 'putting'), E('places', 'place', 'placing')], objs: ['cibus', 'cena', 'pecunia', 'ramus', 'tunica', 'epistula', 'aqua'] });
 VD(8, 'tempto', 'temptāre', 'tempto, -āre, -avī, -atus', 'to try', ['to try', 'to attempt', 'to test', 'to tempt'], { hook: 'attempt', tr: 'thing', en: [E('tries', 'try', 'trying'), E('tests', 'test', 'testing')], objs: ['cibus', 'cena', 'aqua'] });
 X(8, 'atque', 'and, and so', ['and', 'and so', 'and also'], null);
@@ -324,14 +331,14 @@ A(9, 'mirus', 'wonderful', ['wonderful', 'amazing', 'strange', 'marvelous', 'rem
 A(9, 'periculosus', 'dangerous', ['dangerous', 'perilous', 'risky'], 'perilous');
 A(9, 'plenus', 'full', ['full'], 'plenty');
 A(9, 'strenuus', 'active', ['active', 'energetic', 'hardworking', 'vigorous'], 'strenuous');
-VD(9, 'do', 'dāre', 'do, dāre, dedi, datus', 'to give', ['to give'], { hook: 'donate', infChoices: ['dāre', 'dēre', 'dere', 'dīre'] });
-VD(9, 'iubeo', 'iubēre', 'iubeo, iubēre, iussi, iussus', 'to order', ['to order', 'to command', 'to tell'], {});
+VD(9, 'do', 'dāre', 'do, dāre, dedi, datus', 'to give', ['to give'], { hook: 'donate', infChoices: ['dāre', 'dēre', 'dere', 'dīre'], tr: 'thing', en: [E('gives', 'give', 'giving')], objs: ['pecunia', 'cibus', 'poena', 'epistula', 'equus', 'tunica', 'aqua', 'cena', 'copia', 'fabula'], dat: true });
+VD(9, 'iubeo', 'iubēre', 'iubeo, iubēre, iussi, iussus', 'to order', ['to order', 'to command', 'to tell'], { tr: 'anim', en: [E('orders', 'order', 'ordering'), E('commands', 'command', 'commanding')] });
 X(9, 'inquit', 'he, she says/said', ['he says', 'she says', 'he said', 'she said', 'says', 'said', 'he/she says', 'he/she said'], null);
-VD(9, 'mando', 'mandāre', 'mando, -āre, -avī, -atus', 'to entrust', ['to entrust', 'to hand over', 'to command', 'to order'], 'mandate');
-VD(9, 'monstro', 'monstrāre', 'monstro, -āre, -avī, -atus', 'to show', ['to show', 'to point out', 'to demonstrate'], 'demonstrate');
-VD(9, 'nuntio', 'nuntiāre', 'nuntio, -āre, -avī, -atus', 'to announce', ['to announce', 'to report'], 'announce');
-VD(9, 'quiesco', 'quiescere', 'quiesco, quiescere, quievī, quietus', 'to be quiet/calm', ['to be quiet', 'to be calm', 'to rest', 'to relax', 'quiet', 'calm'], 'quiet');
-VD(9, 'vigilo', 'vigilāre', 'vigilo, -āre, -avī, -atus', 'to be awake, to remain awake', ['to be awake', 'to remain awake', 'to stay awake', 'to keep watch', 'awake'], 'vigilant');
+VD(9, 'mando', 'mandāre', 'mando, -āre, -avī, -atus', 'to entrust', ['to entrust', 'to hand over', 'to command', 'to order'], { hook: 'mandate', tr: 'thing', en: [E('entrusts', 'entrust', 'entrusting'), E('hands over', 'hand over', 'handing over')], objs: ['pecunia', 'epistula', 'villa', 'equus', 'raeda', 'taberna'], dat: true });
+VD(9, 'monstro', 'monstrāre', 'monstro, -āre, -avī, -atus', 'to show', ['to show', 'to point out', 'to demonstrate'], { hook: 'demonstrate', tr: 'thing', en: [E('shows', 'show', 'showing')], objs: ['villa', 'hortus', 'ager', 'via', 'epistula', 'fabula', 'tunica', 'raeda', 'taberna', 'vicus', 'insula'], dat: true });
+VD(9, 'nuntio', 'nuntiāre', 'nuntio, -āre, -avī, -atus', 'to announce', ['to announce', 'to report'], { hook: 'announce', tr: 'thing', en: [E('announces', 'announce', 'announcing'), E('reports', 'report', 'reporting')], objs: ['victoria', 'poena'], dat: true });
+VD(9, 'quiesco', 'quiescere', 'quiesco, quiescere, quievī, quietus', 'to be quiet/calm', ['to be quiet', 'to be calm', 'to rest', 'to relax', 'quiet', 'calm'], { hook: 'quiet', tr: false, en: [E('rests', 'rest', 'resting'), E('is calm', 'are calm', null), E('is quiet', 'are quiet', null)] });
+VD(9, 'vigilo', 'vigilāre', 'vigilo, -āre, -avī, -atus', 'to be awake, to remain awake', ['to be awake', 'to remain awake', 'to stay awake', 'to keep watch', 'awake'], { hook: 'vigilant', tr: false, en: [E('stays awake', 'stay awake', 'staying awake'), E('keeps watch', 'keep watch', 'keeping watch'), E('is awake', 'are awake', null)] });
 X(9, 'bene', 'well', ['well', 'good'], 'benefit');
 X(9, 'ferociter', 'fiercely, ferociously', ['fiercely', 'ferociously'], 'ferocious');
 X(9, 'olim', 'once', ['once', 'once upon a time', 'one day', 'long ago'], null);
@@ -341,30 +348,30 @@ X(9, 'tantum', 'so much', ['so much', 'only'], null);
 
 /* ---------------- Stage 10 ---------------- */
 N3(10, 'frater', 'fratris', 'm', 'brother', ['brother'], { person: true, hook: 'fraternity' });
-N3(10, 'lux', 'lucis', 'f', 'light', ['light'], { hook: 'lucid' });
+N3(10, 'lux', 'lucis', 'f', 'light', ['light'], { hook: 'lucid', abstract: true });
 N3(10, 'mater', 'matris', 'f', 'mother', ['mother', 'mom'], { person: true, hook: 'maternal' });
 N3(10, 'miles', 'militis', 'm', 'soldier', ['soldier'], { person: true, hook: 'military' });
-N3(10, 'mors', 'mortis', 'f', 'death', ['death'], { hook: 'mortal' });
-N3(10, 'mons', 'montis', 'f', 'mountain', ['mountain', 'mount', 'hill'], { hook: 'mount' });
+N3(10, 'mors', 'mortis', 'f', 'death', ['death'], { hook: 'mortal', abstract: true });
+N3(10, 'mons', 'montis', 'f', 'mountain', ['mountain', 'mount', 'hill'], { hook: 'mount', noAdj: true });
 N3(10, 'pater', 'patris', 'm', 'father', ['father', 'dad'], { person: true, hook: 'paternal' });
-N3(10, 'parens', 'parentis', 'm/f', 'parent', ['parent'], { person: true });
+N3(10, 'parens', 'parentis', 'm/f', 'parent', ['parent'], { person: true, skip3: true });
 N3(10, 'rex', 'regis', 'm', 'king', ['king'], { person: true, hook: 'T. rex = king lizard' });
 N3(10, 'soror', 'sororis', 'f', 'sister', ['sister'], { person: true, hook: 'sorority' });
-N3(10, 'urbs', 'urbis', 'f', 'city (ium)', ['city'], { note: '(ium)', hook: 'urban' });
-N3(10, 'vox', 'vocis', 'f', 'voice', ['voice'], { hook: 'vocal' });
-A(10, 'meus', 'my', ['my', 'mine'], null, { grammar: false });
-A(10, 'tuus', 'your', ['your', 'yours'], null, { grammar: false });
-A(10, 'suus', 'his, hers, its, theirs', ['his', 'hers', 'its', 'theirs', 'her', 'their', 'his own', 'their own'], null, { grammar: false });
-A(10, 'noster', 'our', ['our', 'ours'], null, { stem: 'nostr', rest: 'nostra, nostrum', restOk: ['aum', 'raum', 'rarum', 'nostranostrum', 'nosternostranostrum'], grammar: false, entry: 'noster, nostra, nostrum' });
-A(10, 'vester', 'your (plural you)', ['your', 'yours', "y'all's", 'your (plural)'], null, { stem: 'vestr', rest: 'vestra, vestrum', restOk: ['aum', 'raum', 'rarum', 'vestravestrum', 'vestervestravestrum'], grammar: false, entry: 'vester, vestra, vestrum' });
-VD(10, 'aperio', 'aperīre', 'aperio, aperīre, aperuī, apertus', 'to open', ['to open'], 'aperture = an opening');
-VD(10, 'coquo', 'coquere', 'coquo, coquere, coxī, coctus', 'to cook', ['to cook'], 'coquus = cook');
-VD(10, 'gaudeo', 'gaudēre', 'gaudeo, gaudēre, X, gavisus sum', 'to rejoice', ['to rejoice', 'to be glad', 'to be happy'], 'gaudy');
-VD(10, 'moveo', 'movēre', 'moveo, movēre, movī, motus', 'to move', ['to move'], null);
-VD(10, 'repello', 'repellere', 'repello, repellere, reppulī, repulsus', 'to drive off', ['to drive off', 'to drive away', 'to repel', 'to push back'], 'repel');
-VD(10, 'respondeo', 'respondēre', 'respondeo, respondēre, respondī, responsurus', 'to reply', ['to reply', 'to respond', 'to answer'], 'respond');
-VD(10, 'rogo', 'rogāre', 'rogo -āre, -avī, -atus', 'to ask', ['to ask', 'to ask for'], 'interrogate');
-VD(10, 'trado', 'tradere', 'trado, tradere, tradidī, traditus', 'to hand over', ['to hand over', 'to give', 'to deliver', 'to surrender', 'to betray'], 'tradition = handed down');
+N3(10, 'urbs', 'urbis', 'f', 'city (ium)', ['city'], { note: '(ium)', hook: 'urban', ium: true, enPl: ['cities'] });
+N3(10, 'vox', 'vocis', 'f', 'voice', ['voice'], { hook: 'vocal', abstract: true });
+A(10, 'meus', 'my', ['my', 'mine'], null, { grammar: false, poss: ['my'] });
+A(10, 'tuus', 'your', ['your', 'yours'], null, { grammar: false, poss: ['your'] });
+A(10, 'suus', 'his, hers, its, theirs', ['his', 'hers', 'its', 'theirs', 'her', 'their', 'his own', 'their own'], null, { grammar: false, poss: ['his', 'her', 'its', 'their', 'his own', 'her own', 'its own', 'their own'] });
+A(10, 'noster', 'our', ['our', 'ours'], null, { stem: 'nostr', rest: 'nostra, nostrum', restOk: ['aum', 'raum', 'rarum', 'nostranostrum', 'nosternostranostrum'], grammar: false, poss: ['our'], entry: 'noster, nostra, nostrum' });
+A(10, 'vester', 'your (plural you)', ['your', 'yours', "y'all's", 'your (plural)'], null, { stem: 'vestr', rest: 'vestra, vestrum', restOk: ['aum', 'raum', 'rarum', 'vestravestrum', 'vestervestravestrum'], grammar: false, poss: ['your', "y'all's", 'your (plural)'], entry: 'vester, vestra, vestrum' });
+VD(10, 'aperio', 'aperīre', 'aperio, aperīre, aperuī, apertus', 'to open', ['to open'], { hook: 'aperture = an opening', tr: 'thing', en: [E('opens', 'open', 'opening')], objs: ['ianua', 'porta', 'taberna', 'epistula', 'villa', 'schola'] });
+VD(10, 'coquo', 'coquere', 'coquo, coquere, coxī, coctus', 'to cook', ['to cook'], { hook: 'coquus = cook', tr: 'thing', en: [E('cooks', 'cook', 'cooking')], objs: ['cena', 'cibus'] });
+VD(10, 'gaudeo', 'gaudēre', 'gaudeo, gaudēre, X, gavisus sum', 'to rejoice', ['to rejoice', 'to be glad', 'to be happy'], { hook: 'gaudy', tr: false, en: [E('rejoices', 'rejoice', 'rejoicing'), E('is glad', 'are glad', null), E('is happy', 'are happy', null)] });
+VD(10, 'moveo', 'movēre', 'moveo, movēre, movī, motus', 'to move', ['to move'], { tr: 'thing', en: [E('moves', 'move', 'moving')], objs: ['raeda', 'ramus', 'equus', 'murus'] });
+VD(10, 'repello', 'repellere', 'repello, repellere, reppulī, repulsus', 'to drive off', ['to drive off', 'to drive away', 'to repel', 'to push back'], { hook: 'repel', tr: 'anim', en: [E('drives off', 'drive off', 'driving off'), E('drives away', 'drive away', 'driving away'), E('repels', 'repel', 'repelling'), E('pushes back', 'push back', 'pushing back')] });
+VD(10, 'respondeo', 'respondēre', 'respondeo, respondēre, respondī, responsurus', 'to reply', ['to reply', 'to respond', 'to answer'], { hook: 'respond', tr: false, en: [E('replies', 'reply', 'replying'), E('answers', 'answer', 'answering'), E('responds', 'respond', 'responding')] });
+VD(10, 'rogo', 'rogāre', 'rogo -āre, -avī, -atus', 'to ask', ['to ask', 'to ask for'], { hook: 'interrogate', tr: 'anim', en: [E('asks', 'ask', 'asking')] });
+VD(10, 'trado', 'tradere', 'trado, tradere, tradidī, traditus', 'to hand over', ['to hand over', 'to give', 'to deliver', 'to surrender', 'to betray'], { hook: 'tradition = handed down', tr: 'thing', en: [E('hands over', 'hand over', 'handing over'), E('gives', 'give', 'giving'), E('delivers', 'deliver', 'delivering')], objs: ['pecunia', 'epistula', 'cibus', 'tunica', 'equus', 'raeda'], dat: true });
 
 export const W = Object.fromEntries(WORDS.map(w => [w.id, w]));
 export const STAGES = [...new Set(WORDS.map(w => w.stage))].sort((a, b) => a - b);

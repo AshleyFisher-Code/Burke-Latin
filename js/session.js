@@ -1,10 +1,10 @@
 // Builds practice sessions as lists of small, saveable "specs", and turns specs back into cards.
 import { WORDS, W, MAX_STAGE, setUnits, unitsOf, curUnit, isOn, inUnit, stageOn } from './data.js';
-import { vocabL2E, vocabPick, pickOpts, gNID, gChart, gAgree, gPhrase, gFixPhrase, gVnum, gSV, gComp, gRole, gTrans, gFixSent, gTrans2, gFix2, randomSpec2, poolsFor, fix2Errors, gCase, gDecline, gObjForm, gCaseFn, gDobj, caseFnAsks, randomSpec3, pools3, gPnum, gVtrans, gVpick, gConj, gCase5, gDecline5, gAgree5, gPPl2e, gPPe2l, CONJ_VERBS, PERSONS6, gIrrQ, IRR_QS, gCase8, gDecline8, gGenType, gGenL2E, randomGenPair,
+import { vocabL2E, vocabPick, pickOpts, gNID, gChart, gAgree, gPhrase, gFixPhrase, gVnum, gSV, gComp, gRole, gTrans, gFixSent, gTrans2, gFix2, randomSpec2, poolsFor, fix2Errors, gCase, gDecline, gObjForm, gCaseFn, gDobj, caseFnAsks, randomSpec3, pools3, gPnum, gVtrans, gVpick, gConj, gCase5, gDecline5, gAgree5, gPPl2e, gPPe2l, CONJ_VERBS, PERSONS6, gIrrQ, IRR_QS, gCase8, gDecline8, gDatQ, gDeclQ, gAgree10, gPossAgree, gT3Q, T3_QS, declItems, N3_NOUNS, DAT_QS, randomIOSpec, gIOAsk, gGenType, gGenL2E, randomGenPair,
   makeSkillCard, SKILLS, SKILL, CHARTS, shuffle, pickOne, PL_NOUNS, randomSentenceSpec, PHRASE_ADJS, PERSONS, NOUNS, COMP_ADJS } from './gen.js';
 import { wordStatus, skillAcc, quizWords, quizSkills, isMasteryDay, quizCovers } from './srs.js';
 
-const BUILD = { nid: gNID, chart: gChart, agree: gAgree, phrase: gPhrase, fixphrase: gFixPhrase, vnum: gVnum, sv: gSV, comp: gComp, role: gRole, trans: gTrans, fixsent: gFixSent, trans2: gTrans2, fix2: gFix2, case: gCase, decline: gDecline, objform: gObjForm, casefn: gCaseFn, dobj: gDobj, pnum: gPnum, vtrans: gVtrans, vpick: gVpick, conj: gConj, case5: gCase5, decline5: gDecline5, agree5: gAgree5, ppl2e: gPPl2e, ppe2l: gPPe2l, irrq: gIrrQ, case8: gCase8, decline8: gDecline8, gentype: gGenType, genl2e: gGenL2E };
+const BUILD = { datq: gDatQ, declq: gDeclQ, agree10: gAgree10, possagree: gPossAgree, t3q: gT3Q, nid: gNID, chart: gChart, agree: gAgree, phrase: gPhrase, fixphrase: gFixPhrase, vnum: gVnum, sv: gSV, comp: gComp, role: gRole, trans: gTrans, fixsent: gFixSent, trans2: gTrans2, fix2: gFix2, case: gCase, decline: gDecline, objform: gObjForm, casefn: gCaseFn, dobj: gDobj, pnum: gPnum, vtrans: gVtrans, vpick: gVpick, conj: gConj, case5: gCase5, decline5: gDecline5, agree5: gAgree5, ppl2e: gPPl2e, ppe2l: gPPe2l, irrq: gIrrQ, case8: gCase8, decline8: gDecline8, gentype: gGenType, genl2e: gGenL2E };
 export function cardFromSpec(sp) {
   let c;
   // He only ever reads Latin and answers in English. Old saved English→Latin cards are shown as Latin→English.
@@ -164,6 +164,37 @@ export function buildMock(state, settings, stage, covers = 'both') {
   const vocab = cur.slice(0, 10 - Math.min(2, misc.length)).concat(misc.slice(0, 2)); // always 10 words (Stage 5's extras are all prepositions)
   const sections = [];
   sections.push({ name: 'I. Vocabulary', pts: 1, specs: shuffle(vocab).map(w => vocabSpec(w.id, 'l2e')) });
+  if (stage >= 10) { // Stage 10 quiz: 3rd declension: decline, case ID, agreement (and possessives), facts, grammar questions, translating
+    const n3 = shuffle(N3_NOUNS.filter(isOn)), P = pools3(), C5 = ['nom', 'gen', 'dat', 'acc', 'abl'], cs = shuffle(C5);
+    sections.push({ name: 'II. Decline the nouns', pts: 1, specs: [0, 1, 2].map(i => ({ t: 'g', type: 'decline8', params: [n3[i % n3.length].id, i % 2 ? 'pl' : 'sg', cs[i]], skill: 'case' })) });
+    sections.push({ name: 'III. Case, number and gender', pts: 1, specs: [3, 4, 5].map((k, i) => ({ t: 'g', type: 'case8', params: [n3[k % n3.length].id, i % 2 ? 'sg' : 'pl', cs[(i + 3) % 5]], skill: 'case' })) });
+    const adjN = n3.filter(n => !n.noAdj), ag = [];
+    for (let i = 0; i < 2; i++) { const c = makeSkillCard('agree10', pick, stage); ag.push(gSpec(c)); }
+    for (let i = 0; i < 2; i++) ag.push(gSpec(gPossAgree(adjN[(i + 6) % adjN.length].id, i ? 'pl' : 'sg', cs[i], i ? 'suus' : 'meus')));
+    sections.push({ name: 'IV. Agreement', pts: 1, specs: ag });
+    sections.push({ name: 'V. 3rd declension facts', pts: 1, specs: [gSpec(gT3Q(Math.floor(Math.random() * T3_QS.length))), gSpec(gDeclQ(Math.floor(Math.random() * 4)))] });
+    const cf = []; while (cf.length < 2) cf.push(gSpec(makeSkillCard('casefn', pick, stage)));
+    sections.push({ name: 'VI. Grammar questions', pts: 1, specs: cf });
+    const has3 = sp => JSON.stringify(sp).match(/"(frater|mater|miles|pater|rex|soror|urbs|mons)"/);
+    const tr = []; for (let i = 0; i < 3; i++) { let sp = randomSpec3(pick, P, 0.5); for (let k = 0; k < 30 && !has3(sp); k++) sp = randomSpec3(pick, P, 0.5); tr.push(gSpec(gDobj(sp))); }
+    sections.push({ name: 'VII. Translating (2 points each)', pts: 2, specs: tr });
+    if (covers === 'grammar') sections.shift();
+    const specs = []; sections.forEach((s, si) => s.specs.forEach(sp => specs.push({ ...sp, sec: si, pts: s.pts })));
+    return { mode: 'mock', kind: covers, title: covers === 'grammar' ? `Grammar mock quiz · Stage ${stage}` : `Mock quiz · Stage ${stage}`, test: true, stage, sections: sections.map(s => ({ name: s.name })), specs };
+  }
+  if (stage >= 9) { // Stage 9 quiz: the dative: decline, case ID (all cases that fit), indirect object facts, IO / DO questions, translating
+    const nouns9 = shuffle(PL_NOUNS.filter(w => isOn(w) && w.stage <= stage)), P = pools3();
+    sections.push({ name: 'II. Decline the nouns', pts: 1, specs: nouns9.slice(0, 3).map((w, i) => ({ t: 'g', type: 'decline8', params: [w.id, i % 2 ? 'pl' : 'sg', 'dat'], skill: 'case' })) });
+    sections.push({ name: 'III. Case, number and gender', pts: 1, specs: nouns9.slice(3, 7).map((w, i) => ({ t: 'g', type: 'case8', params: [w.id, i % 2 ? 'sg' : 'pl', ['dat', 'gen', 'dat', 'acc'][i]], skill: 'case' })) });
+    const qs = shuffle(DAT_QS.map((_, i) => i)).slice(0, 2);
+    sections.push({ name: 'IV. Indirect objects', pts: 1, specs: qs.map(i => gSpec(gDatQ(i))) });
+    sections.push({ name: 'V. Grammar questions', pts: 1, specs: ['io', 'ioq', 'doq'].map(k => gSpec(gIOAsk(pick, P, k))) });
+    const tr = []; for (let i = 0; i < 4; i++) tr.push(gSpec(gDobj(i < 2 ? randomIOSpec(pick, P) : randomSpec3(pick, P, 0.5))));
+    sections.push({ name: 'VI. Translating (2 points each)', pts: 2, specs: tr });
+    if (covers === 'grammar') sections.shift();
+    const specs = []; sections.forEach((s, si) => s.specs.forEach(sp => specs.push({ ...sp, sec: si, pts: s.pts })));
+    return { mode: 'mock', kind: covers, title: covers === 'grammar' ? `Grammar mock quiz · Stage ${stage}` : `Mock quiz · Stage ${stage}`, test: true, stage, sections: sections.map(s => ({ name: s.name })), specs };
+  }
   if (stage >= 8) { // Stage 8 quiz: genitive: decline, case ID (both cases when two fit), type of genitive, phrases, grammar questions, translating
     const nouns8 = shuffle(PL_NOUNS.filter(w => isOn(w) && w.stage <= stage)), P = pools3();
     sections.push({ name: 'II. Decline the nouns', pts: 1, specs: nouns8.slice(0, 3).map((w, i) => ({ t: 'g', type: 'decline8', params: [w.id, i % 2 ? 'pl' : 'sg', 'gen'], skill: 'case' })) });
