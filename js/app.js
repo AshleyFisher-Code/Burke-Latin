@@ -1,5 +1,5 @@
 import { auth, db, doc, setDoc, onSnapshot, onAuthStateChanged, signInWithEmailAndPassword, signOut } from './firebase.js';
-import { STUDENT_UID, PARENT_UID, APP_VERSION } from './config.js';
+import { STUDENT_UIDS, PARENT_UID, APP_VERSION } from './config.js';
 import { WORDS, W, STAGES, MAX_STAGE, STAGE_NAMES, setUnits, unitsOf, isOn, inUnit, stageOn, curUnit } from './data.js';
 import { SKILLS, SKILL } from './gen.js';
 import { cardFromSpec, buildDaily, buildReview, buildLearn, buildUnit, buildTrouble, troubleWords, buildSkill, buildTestRun, buildMock, buildMastery, followUp, stageOf } from './session.js';
@@ -29,7 +29,12 @@ window.addEventListener('online', setNet); window.addEventListener('offline', se
 
 /* ---------- data ---------- */
 let user = null, role = null, S = null, settings = {}, unsubs = [], run = null, loadedOnce = false, saveErr = null;
-let studentDoc = () => doc(db, 'students', STUDENT_UID);
+let curUid = null, studentUnsub = null; // the student whose progress is open (the parent can switch)
+let studentDoc = () => doc(db, 'students', curUid);
+// Names live in settings (not in the code). Older settings had one name for the first student.
+const nameOf = uid => ((settings.names || {})[uid] || (uid === STUDENT_UIDS[0] ? settings.name : '') || '');
+const labelOf = uid => nameOf(uid) || `Student ${STUDENT_UIDS.indexOf(uid) + 1}`;
+const PICK_KEY = 'latin-parent-student';
 const settingsDoc = () => doc(db, 'settings', 'app');
 let saveTimer = null;
 // Every change stamps updatedAt right away; the write follows shortly (or immediately on flush).
@@ -48,27 +53,43 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 window.addEventListener('pagehide', () => { if (saveTimer) flush(); });
 function showSaveError() {
   if (document.getElementById('saveerr')) return;
-  app.prepend(h('p', { class: 'err', id: 'saveerr' }, 'Progress isn\'t saving: ', saveErr && saveErr.code === 'permission-denied' ? 'the database rules are blocking it. Ask Mom to check the Firestore rules.' : 'it will retry when you\'re back online.'));
+  app.prepend(h('p', { class: 'err', id: 'saveerr' }, 'Progress isn\'t saving: ', saveErr && saveErr.code === 'permission-denied' ? 'the database rules are blocking it. Ask a parent to check the Firestore rules.' : 'it will retry when you\'re back online.'));
 }
-const runKey = () => 'latin-run-' + (user && user.uid);
+const runKey = () => 'latin-run-' + (user && user.uid) + (role === 'parent' ? '-' + curUid : '');
 const saveRun = () => { try { if (run) localStorage.setItem(runKey(), JSON.stringify(run)); else localStorage.removeItem(runKey()); } catch (e) {} };
 const loadRun = () => { try { return JSON.parse(localStorage.getItem(runKey()) || 'null'); } catch (e) { return null; } };
 
 onAuthStateChanged(auth, u => {
-  unsubs.forEach(f => f()); unsubs = []; user = u; S = null; loadedOnce = false;
+  unsubs.forEach(f => f()); unsubs = []; if (studentUnsub) studentUnsub(); studentUnsub = null; user = u; S = null; loadedOnce = false;
   if (!u) { role = null; return renderLogin(); }
-  role = u.uid === PARENT_UID ? 'parent' : u.uid === STUDENT_UID ? 'student' : 'other';
+  role = u.uid === PARENT_UID ? 'parent' : STUDENT_UIDS.includes(u.uid) ? 'student' : 'other';
+  let picked = null; try { picked = localStorage.getItem(PICK_KEY); } catch (e) {}
+  curUid = role === 'student' ? u.uid : STUDENT_UIDS.includes(picked) ? picked : STUDENT_UIDS[0];
   if (role === 'other') return show(h('section', { class: 'card' }, h('h2', { text: 'This account isn\'t set up for Latin Practice.' }), h('button', { class: 'ghost', onclick: () => signOut(auth) }, 'Sign out')));
   unsubs.push(onSnapshot(settingsDoc(), snap => { settings = snap.exists() ? snap.data() : {}; setUnits(unitsOf(settings)); if (loadedOnce && !run) route(); }, e => console.error(e)));
-  unsubs.push(onSnapshot(studentDoc(), snap => {
+  subscribeStudent();
+});
+// Parent view: open another student's progress
+function switchStudent(uid) {
+  if (uid === curUid) return;
+  if (saveTimer) flush();
+  if (studentUnsub) studentUnsub(); studentUnsub = null;
+  curUid = uid; S = null; loadedOnce = false; run = null; preview = false; page = 'home';
+  try { localStorage.setItem(PICK_KEY, uid); } catch (e) {}
+  subscribeStudent();
+}
+function subscribeStudent() {
+  const uid = curUid;
+  studentUnsub = onSnapshot(studentDoc(), snap => {
+    if (uid !== curUid) return;
     if (run) return; // don't disturb an answer in progress
     const incoming = snap.exists() ? snap.data() : null;
     if (S && incoming && (incoming.updatedAt || 0) < (S.updatedAt || 0)) return; // an older copy; ours is newer
     if (S && saveTimer) return; // a local change is about to be written
     S = incoming ? Object.assign(blankState(), incoming) : blankState();
     if (!loadedOnce) { loadedOnce = true; route(); } else if (!run) route();
-  }, e => { console.error(e); show(h('section', { class: 'card' }, h('h2', { text: 'Can\'t load progress' }), h('p', { class: 'muted', text: e.code === 'permission-denied' ? 'The database rules are blocking this account. Check that the Firestore rules were published.' : 'Check the connection and reload.' }), h('p', { class: 'small muted', text: `v${APP_VERSION} · signed in as …${u.uid.slice(0, 4)} · looking for …${STUDENT_UID.slice(0, 4)}` }), h('button', { class: 'ghost', onclick: () => signOut(auth) }, 'Sign out'))); }));
-});
+  }, e => { console.error(e); show(h('section', { class: 'card' }, h('h2', { text: 'Can\'t load progress' }), h('p', { class: 'muted', text: e.code === 'permission-denied' ? 'The database rules are blocking this account. Check that the Firestore rules were published.' : 'Check the connection and reload.' }), h('p', { class: 'small muted', text: `v${APP_VERSION} · signed in as …${u.uid.slice(0, 4)} · looking for …${STUDENT_UID.slice(0, 4)}` }), h('button', { class: 'ghost', onclick: () => signOut(auth) }, 'Sign out'))); });
+}
 
 /* ---------- routing ---------- */
 let page = 'home', preview = false;
@@ -125,7 +146,7 @@ function lightCard(q, rd, compact) {
 function renderHome() {
   const t = today(), q = nextQuiz(settings, t), rd = q ? readiness(S, q, t) : null, v = streakView(S, t, settings);
   const saved = loadRun();
-  const name = settings.name || '';
+  const name = nameOf(curUid);
   const cov = q ? quizCovers(q) : 'both';
   const daily = q && q.daysLeft <= 4 ? (cov === 'vocab' ? 'Vocab quiz prep' : cov === 'grammar' ? 'Grammar quiz prep' : 'Quiz prep') : isMasteryDay(S) ? 'Mastery Check' : "Today's practice";
   const dueN = WORDS.filter(w => isOn(w) && S.words[w.id] && S.words[w.id].seen && S.words[w.id].due <= t).length;
@@ -133,7 +154,7 @@ function renderHome() {
   const weak = SKILLS.filter(s => stageOn(s.stage) && skillStatus(S, s.id).level !== 'good').length;
   show(
     h('div', { class: 'top' }, h('h1', { text: `Salvē${name ? ', ' + name : ''}!` }), role === 'parent' ? h('button', { class: 'back', onclick: () => go('parent') }, 'Parent view') : null),
-    preview ? h('p', { class: 'chip gold', text: 'Preview of Burke\'s home' }) : null,
+    preview ? h('p', { class: 'chip gold', text: `Preview of ${labelOf(curUid)}'s home` }) : null,
     rd ? lightCard(q, rd, true) : q ? h('p', { class: 'small muted', text: `Next: ${qName(q)} ${fmtDate(q.date)} · ${q.daysLeft} days. Test-readiness light turns on 4 days before.` }) : null,
     saved && saved.uid === user.uid ? h('button', { class: 'btn hero', onclick: () => { run = saved; renderRun(); } }, h('b', { text: 'Resume ' + saved.sess.title }), h('span', { text: `Question ${saved.idx + 1} of ${saved.deck.length}` })) : null,
     v.done ? h('button', { class: 'btn done', onclick: () => start(buildDaily(S, settings, t, q)) }, h('b', { text: `${daily} done ✓` }), h('span', { text: 'Want more? Run another round (streak already counted).' }))
@@ -364,6 +385,7 @@ function renderParent() {
   const lastLog = log[log.length - 1];
   show(
     h('div', { class: 'top' }, h('h1', { text: 'Parent view' }), h('button', { class: 'linkbtn', onclick: () => signOut(auth) }, 'Sign out')),
+    STUDENT_UIDS.length > 1 ? h('div', { class: 'choices tight', role: 'group', 'aria-label': 'Student' }, STUDENT_UIDS.map(uid => h('button', { class: 'opt' + (uid === curUid ? ' sel' : ''), 'aria-pressed': String(uid === curUid), onclick: () => switchStudent(uid) }, labelOf(uid)))) : null,
     h('section', { class: 'card' },
       h('div', { class: 'spread' }, h('h2', { text: v.done ? 'Practiced today ✓' : 'Not practiced yet today' }), h('span', { class: 'pill ' + (v.done ? 'good' : 'mid'), text: `${v.count}-day streak` })),
       h('p', { class: 'small muted', text: `${rk ? `Rank: ${rk.latin} (${rk.en}). ` : ''}Best streak ${S.streak.best}. Rest days saved: ${v.rest}. ${lastLog ? `Last session ${fmtDate(isoFromDay(lastLog.day))}: ${lastLog.right}/${lastLog.n} first try.` : 'No sessions yet.'}` }),
@@ -378,13 +400,14 @@ function renderParent() {
     settingsCard(),
     h('section', { class: 'card' }, h('h2', { text: 'Backup' }), h('p', { class: 'small muted', text: 'Saves a copy of all progress to this device. Once a month is plenty.' }),
       h('button', { class: 'ghost', onclick: download }, 'Download progress')),
-    h('button', { class: 'btn', onclick: () => go('preview') }, h('b', { text: 'See Burke\'s home screen' }), h('span', { text: 'Anything you practice here counts as his.' })),
+    h('button', { class: 'btn', onclick: () => go('preview') }, h('b', { text: `See ${labelOf(curUid)}'s home screen` }), h('span', { text: `Anything you practice here counts as ${labelOf(curUid)}'s.` })),
     h('p', { class: 'small muted center', text: 'v' + APP_VERSION }));
 }
 function settingsCard() {
   const s = JSON.parse(JSON.stringify(settings || {}));
   s.quizzes = s.quizzes || []; s.rewards = s.rewards || {};
-  const name = h('input', { type: 'text', id: 'set-name', value: s.name || '', placeholder: 'Burke' });
+  s.names = s.names || {}; if (s.name && !s.names[STUDENT_UIDS[0]]) s.names[STUDENT_UIDS[0]] = s.name;
+  const nameInputs = STUDENT_UIDS.map((uid, i) => ({ uid, el: h('input', { type: 'text', id: 'set-name-' + i, value: s.names[uid] || '', placeholder: 'First name' }) }));
   const on = unitsOf(s);
   const unitBoxes = STAGES.map(x => ({ x, el: h('input', { type: 'checkbox', id: 'unit-' + x, checked: on.includes(x) }) }));
   const qDate = h('input', { type: 'date', id: 'q-date' });
@@ -395,13 +418,15 @@ function settingsCard() {
   const msg = h('p', { class: 'small muted', hidden: true });
   const rewardInputs = milestones(0).slice(0, 9).map(m => ({ m, el: h('input', { type: 'text', id: 'rw-' + m.days, value: s.rewards[m.days] || '', placeholder: 'e.g. pick Friday dinner' }) }));
   const persist = async () => {
-    s.name = name.value.trim();
+    nameInputs.forEach(({ uid, el }) => { const v = el.value.trim(); if (v) s.names[uid] = v; else delete s.names[uid]; });
+    s.name = s.names[STUDENT_UIDS[0]] || '';
     const picked = unitBoxes.filter(u => u.el.checked).map(u => u.x); s.units = picked.length ? picked : [1]; s.currentStage = Math.max(...s.units); setUnits(s.units);
     rewardInputs.forEach(({ m, el }) => { const v = el.value.trim(); if (v) s.rewards[m.days] = v; else delete s.rewards[m.days]; });
     try { await setDoc(settingsDoc(), s); msg.hidden = false; msg.textContent = 'Saved.'; } catch (e) { msg.hidden = false; msg.textContent = 'Couldn\'t save: ' + (e.code || e.message); }
   };
   return h('section', { class: 'card' }, h('h2', { text: 'Settings' }),
-    h('label', { class: 'f' }, 'His name (shown on his home screen)', name),
+    h('div', {}, h('div', { class: 'eyebrow', text: 'Students (names shown on their home screens)' }), h('div', { class: 'fields' }, nameInputs.map(({ el }, i) => h('label', { class: 'f' }, `Student ${i + 1}`, el)))),
+    h('p', { class: 'small muted', text: 'Units, quiz dates, days off and rewards are shared by all students. Progress is separate.' }),
     h('div', {}, h('div', { class: 'eyebrow', text: 'Units he has done or is doing' }), h('p', { class: 'small muted', text: 'Only ticked units show up in his practice. The highest ticked unit is his current unit (Unit vocab button and vocab mock quiz).' }),
       h('div', { class: 'checks' }, unitBoxes.map(({ x, el }) => h('label', { class: 'check' }, el, h('span', { text: STAGE_NAMES[x] || `Stage ${x}` }))))),
     h('div', {}, h('div', { class: 'eyebrow', text: 'Quiz dates' }),
